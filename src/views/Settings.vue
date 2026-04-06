@@ -73,10 +73,10 @@
         <input
           type="url"
           v-model="settings.apiUrl"
-          placeholder="http://localhost:8000"
+          placeholder="http://localhost:8000 (leave blank to use dev proxy)"
           class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
         />
-        <p class="text-xs text-slate-400">The base URL of your Record-App backend server.</p>
+        <p class="text-xs text-slate-400">Base URL of your backend. Leave blank when using the Vite dev-server proxy.</p>
       </div>
 
       <button
