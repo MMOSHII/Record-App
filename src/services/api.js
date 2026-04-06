@@ -29,7 +29,7 @@ export async function uploadAndTranscribe(file) {
  * Run summarization on an already-transcribed job.
  * POST /api/v1/summarize
  */
-export async function summarizeJob(folderName) {
+export async function summarizeJob(folderName, fileName) {
   const url = `${store.getBaseUrl()}/api/v1/summarize`
   const response = await fetch(url, {
     method: 'POST',
@@ -37,6 +37,7 @@ export async function summarizeJob(folderName) {
     body: JSON.stringify({
       google_token:store.state.token,
       folder_name: folderName,
+      file_name: fileName,
       provider: store.state.settings.provider,
       model: store.state.settings.model || undefined,
       api_key: store.state.settings.apiKey || undefined
@@ -55,7 +56,7 @@ export async function summarizeJob(folderName) {
  * Run visualization on a summarized job.
  * POST /api/v1/visualize
  */
-export async function visualizeJob(folderName) {
+export async function visualizeJob(folderName, fileName) {
   const url = `${store.getBaseUrl()}/api/v1/visualize`
   const response = await fetch(url, {
     method: 'POST',
@@ -63,6 +64,7 @@ export async function visualizeJob(folderName) {
     body: JSON.stringify({
       google_token:store.state.token,
       folder_name: folderName,
+      file_name: fileName,
       provider: store.state.settings.provider,
       model: store.state.settings.model || undefined,
       api_key: store.state.settings.apiKey || undefined
