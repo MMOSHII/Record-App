@@ -5,22 +5,22 @@ const routes = [
   {
     path: '/login',
     component: () => import('../views/Login.vue'),
-    meta: { title: 'Sign In' }
+    meta: { title: 'Sign In', depth: 0 }
   },
   {
     path: '/',
     component: () => import('../views/Home.vue'),
-    meta: { requiresAuth: true, title: 'Pipeline' }
+    meta: { requiresAuth: true, title: 'Pipeline', depth: 1 }
   },
   {
     path: '/history',
     component: () => import('../views/History.vue'),
-    meta: { requiresAuth: true, title: 'History' }
+    meta: { requiresAuth: true, title: 'History', depth: 2 }
   },
   {
     path: '/settings',
     component: () => import('../views/Settings.vue'),
-    meta: { requiresAuth: true, title: 'Settings' }
+    meta: { requiresAuth: true, title: 'Settings', depth: 3 }
   },
   {
     path: '/:pathMatch(.*)*',
