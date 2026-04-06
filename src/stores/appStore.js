@@ -17,10 +17,11 @@ const state = reactive({
     provider: savedState.settings?.provider || 'ollama',
     model: savedState.settings?.model || '',
     apiKey: savedState.settings?.apiKey || '',
-    apiUrl: savedState.settings?.apiUrl || 'http://localhost:8000'
+    apiUrl: savedState.settings?.apiUrl || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
   },
   pipeline: {
     currentStep: savedState.pipeline?.currentStep || 1,
+    // Reset 'running' status to 'idle' on page reload to avoid stuck loading states
     status: savedState.pipeline?.status === 'running' ? 'idle' : (savedState.pipeline?.status || 'idle'),
     folderName: savedState.pipeline?.folderName || '',
     fileName: savedState.pipeline?.fileName || '',

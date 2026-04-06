@@ -38,7 +38,7 @@ const router = useRouter()
 const { state } = useAppStore()
 const errorMsg = ref('')
 
-const GOOGLE_CLIENT_ID = '710746488463-9ibge0al61j8sseikfde8c3ejc8h99uh.apps.googleusercontent.com'
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '710746488463-9ibge0al61j8sseikfde8c3ejc8h99uh.apps.googleusercontent.com'
 
 const handleCredentialResponse = (response) => {
   try {

@@ -267,7 +267,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed } from 'vue'
 import Stepper from '../components/Stepper.vue'
 import { useAppStore } from '../stores/appStore'
 import * as api from '../services/api.js'
