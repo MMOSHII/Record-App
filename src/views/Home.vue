@@ -347,7 +347,7 @@ const runSummarize = async () => {
   pipeline.lastError = ''
 
   try {
-    const summarizeResult = await api.summarizeJob(pipeline.folderName)
+    const summarizeResult = await api.summarizeJob(pipeline.folderName, pipeline.fileName)
     pipeline.results = {
       ...pipeline.results,
       summary: summarizeResult.summary || '',
@@ -372,7 +372,7 @@ const runVisualize = async () => {
   pipeline.lastError = ''
 
   try {
-    const visualizeResult = await api.visualizeJob(pipeline.folderName)
+    const visualizeResult = await api.visualizeJob(pipeline.folderName, pipeline.fileName)
     pipeline.results = {
       ...pipeline.results,
       mindmap_svg: visualizeResult.svg || visualizeResult.mindmap_svg || '',
