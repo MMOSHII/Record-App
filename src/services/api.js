@@ -9,8 +9,9 @@ const store = useAppStore()
 export async function uploadAndTranscribe(file) {
   const formData = new FormData()
   formData.append('file', file)
+  formData.append('google_token', store.state.token)
 
-  const url = store.getAuthUrl('/api/v1/transcribe')
+  const url = `${store.getBaseUrl()}/api/v1/transcribe`
   const response = await fetch(url, {
     method: 'POST',
     body: formData
