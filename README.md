@@ -34,14 +34,52 @@ npm run build
 npm run preview
 ```
 
+## Python FastAPI Backend
+
+This frontend is designed to work with a Python FastAPI backend (`main.py`).
+
+### Local development (recommended)
+
+Start the Python backend on its default port:
+
+```bash
+uvicorn main:app --reload --port 8000
+```
+
+Then start the Vite dev server:
+
+```bash
+npm run dev
+```
+
+The Vite dev server automatically proxies all `/api/*` requests to `http://localhost:8000`, so no CORS configuration is needed during development. Leave `VITE_API_BASE_URL` unset (the default).
+
+### Remote / production backend
+
+Set `VITE_API_BASE_URL` in a `.env` file (copy from `.env.example`) and the frontend will send API requests directly to that URL:
+
+```env
+VITE_API_BASE_URL=https://your-backend.example.com
+```
+
+When `VITE_API_BASE_URL` is set, the Vite proxy target is also updated so the dev server forwards requests to the same host.
+
+### Google OAuth
+
+Set your Google OAuth client ID in `.env`:
+
+```env
+VITE_GOOGLE_CLIENT_ID=<your-client-id>
+```
+
 ## Configuration
 
-All settings are saved to `localStorage` automatically. Configure on the **Settings** page:
+All runtime settings are saved to `localStorage` automatically. Configure on the **Settings** page:
 
 - **LLM Provider**: Ollama (local), OpenAI, Claude, Gemini, or Groq
 - **Model**: Optional — uses provider default if not set
 - **API Key**: Required for cloud providers
-- **API Base URL**: URL of your backend (default: `http://localhost:8000`)
+- **API Base URL**: Full URL of your backend, or leave empty to use the dev proxy
 
 ## API Endpoints Used
 
@@ -51,7 +89,19 @@ All settings are saved to `localStorage` automatically. Configure on the **Setti
 | `POST` | `/api/v1/summarize` | Summarize a transcribed job |
 | `POST` | `/api/v1/visualize` | Generate mind map visualization |
 | `GET`  | `/api/v1/history` | List all past jobs |
-| `GET`  | `/api/v1/job/{folder}` | Get details of a specific job |
-| `GET`  | `/api/v1/download/{folder}/{file}` | Download an artifact |
+| `GET`  | `/api/v1/job/{folder_name}` | Get details of a specific job |
+| `GET`  | `/api/v1/download/{folder_name}/{file_type}` | Download an artifact |
+| `GET`  | `/api/v1/health` | Backend health check |
 
 All API requests are authenticated via `?google_token=<token>` query parameter.
+
+### Download file types
+
+The `/api/v1/download/{folder_name}/{file_type}` endpoint accepts the following `file_type` values:
+
+| `file_type` | Description |
+|-------------|-------------|
+| `transcript` | Plain-text transcription |
+| `summary` | Plain-text summary |
+| `mindmap_svg` | Mind-map SVG image |
+| `mindmap_html` | Interactive mind-map HTML page |

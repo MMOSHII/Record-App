@@ -120,7 +120,7 @@
               <div class="flex items-center justify-between">
                 <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wide">📄 Transcript</h4>
                 <a
-                  :href="getDownloadUrl(job.folder_name, 'transcript.txt')"
+                  :href="getDownloadUrl(job.folder_name, 'transcript')"
                   download
                   class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition"
                 >
@@ -137,7 +137,7 @@
               <div class="flex items-center justify-between">
                 <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wide">📝 Summary</h4>
                 <a
-                  :href="getDownloadUrl(job.folder_name, 'summary.txt')"
+                  :href="getDownloadUrl(job.folder_name, 'summary')"
                   download
                   class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition"
                 >
@@ -201,10 +201,10 @@ const expandedJobs = reactive(new Set())
 const jobDetails = reactive({})
 
 const artifactList = [
-  { file: 'transcript.txt', label: 'Transcript', icon: '📄' },
-  { file: 'summary.txt', label: 'Summary', icon: '📝' },
-  { file: 'mindmap.svg', label: 'Mind Map SVG', icon: '🧠' },
-  { file: 'mindmap.html', label: 'Mind Map HTML', icon: '🌐' }
+  { file: 'transcript', label: 'Transcript', icon: '📄' },
+  { file: 'summary', label: 'Summary', icon: '📝' },
+  { file: 'mindmap_svg', label: 'Mind Map SVG', icon: '🧠' },
+  { file: 'mindmap_html', label: 'Mind Map HTML', icon: '🌐' }
 ]
 
 const statusClass = (status) => {

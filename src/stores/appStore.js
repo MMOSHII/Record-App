@@ -17,7 +17,9 @@ const state = reactive({
     provider: savedState.settings?.provider || 'ollama',
     model: savedState.settings?.model || '',
     apiKey: savedState.settings?.apiKey || '',
-    apiUrl: savedState.settings?.apiUrl || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+    apiUrl: savedState.settings?.apiUrl !== undefined
+      ? savedState.settings.apiUrl
+      : (import.meta.env.VITE_API_BASE_URL || '')
   },
   pipeline: {
     currentStep: savedState.pipeline?.currentStep || 1,

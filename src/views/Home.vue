@@ -189,7 +189,7 @@
           <h3 class="text-sm font-bold text-slate-700">📄 Transcription</h3>
           <a
             v-if="pipeline.folderName"
-            :href="downloadUrl('transcript.txt')"
+            :href="downloadUrl('transcript')"
             download
             class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition"
           >
@@ -207,7 +207,7 @@
           <h3 class="text-sm font-bold text-slate-700">📝 Summary</h3>
           <a
             v-if="pipeline.folderName"
-            :href="downloadUrl('summary.txt')"
+            :href="downloadUrl('summary')"
             download
             class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition"
           >
@@ -226,7 +226,7 @@
           <div class="flex gap-3">
             <a
               v-if="pipeline.folderName"
-              :href="downloadUrl('mindmap.svg')"
+              :href="downloadUrl('mindmap_svg')"
               download
               class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition"
             >
@@ -234,7 +234,7 @@
             </a>
             <a
               v-if="pipeline.folderName"
-              :href="downloadUrl('mindmap.html')"
+              :href="downloadUrl('mindmap_html')"
               download
               class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition"
             >
