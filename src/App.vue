@@ -7,7 +7,10 @@
     >
       <div class="max-w-5xl mx-auto px-4 md:px-8 py-3 flex items-center justify-between">
         <router-link to="/" class="flex items-center gap-2">
-          <span class="text-xl font-extrabold text-slate-900">🎙 Audio Intelligence</span>
+          <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+          </svg>
+          <span class="text-xl font-extrabold text-slate-900">Audio Intelligence</span>
         </router-link>
 
         <!-- Desktop nav links -->
@@ -58,7 +61,7 @@
           active-class="bg-indigo-50 text-indigo-700"
           @click="mobileMenuOpen = false"
         >
-          <span>{{ link.icon }}</span>
+          <NavIcon :name="link.icon" />
           <span>{{ link.label }}</span>
         </router-link>
         <div class="pt-2 border-t border-slate-100">
@@ -98,7 +101,7 @@
           active-class="text-indigo-600"
           exact-active-class="text-indigo-600"
         >
-          <span class="text-lg leading-none">{{ link.icon }}</span>
+          <NavIcon :name="link.icon" />
           <span>{{ link.label }}</span>
         </router-link>
       </div>
@@ -113,15 +116,16 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from './stores/appStore'
+import NavIcon from './components/NavIcon.vue'
 
 const store = useAppStore()
 const router = useRouter()
 const mobileMenuOpen = ref(false)
 
 const navLinks = [
-  { to: '/', label: 'Home', icon: '🏠' },
-  { to: '/history', label: 'History', icon: '📋' },
-  { to: '/settings', label: 'Settings', icon: '⚙️' }
+  { to: '/', label: 'Home', icon: 'home' },
+  { to: '/history', label: 'History', icon: 'history' },
+  { to: '/settings', label: 'Settings', icon: 'settings' }
 ]
 
 const handleLogout = () => {
