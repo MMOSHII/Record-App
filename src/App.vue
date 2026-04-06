@@ -81,7 +81,7 @@
     <!-- Page Content -->
     <main class="flex-1 max-w-5xl w-full mx-auto p-4 md:p-8">
       <router-view v-slot="{ Component }">
-        <transition name="fade" mode="out-in">
+        <transition :name="transitionName" mode="out-in">
           <component :is="Component" />
         </transition>
       </router-view>
@@ -121,6 +121,14 @@ import NavIcon from './components/NavIcon.vue'
 const store = useAppStore()
 const router = useRouter()
 const mobileMenuOpen = ref(false)
+const transitionName = ref('slide-left')
+
+router.beforeEach((to, from) => {
+  const toDepth = to.meta.depth ?? 1
+  const fromDepth = from.meta.depth ?? 1
+  transitionName.value = toDepth >= fromDepth ? 'slide-left' : 'slide-right'
+  return true
+})
 
 const navLinks = [
   { to: '/', label: 'Home', icon: 'home' },
@@ -136,12 +144,39 @@ const handleLogout = () => {
 </script>
 
 <style>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.15s ease;
+/* Forward navigation: new page slides in from right */
+.slide-left-enter-active {
+  transition: all 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  will-change: transform, opacity;
 }
-.fade-enter-from,
-.fade-leave-to {
+.slide-left-leave-active {
+  transition: all 0.22s cubic-bezier(0.55, 0, 1, 0.45);
+  will-change: transform, opacity;
+}
+.slide-left-enter-from {
   opacity: 0;
+  transform: translateX(24px);
+}
+.slide-left-leave-to {
+  opacity: 0;
+  transform: translateX(-24px);
+}
+
+/* Backward navigation: new page slides in from left */
+.slide-right-enter-active {
+  transition: all 0.28s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  will-change: transform, opacity;
+}
+.slide-right-leave-active {
+  transition: all 0.22s cubic-bezier(0.55, 0, 1, 0.45);
+  will-change: transform, opacity;
+}
+.slide-right-enter-from {
+  opacity: 0;
+  transform: translateX(-24px);
+}
+.slide-right-leave-to {
+  opacity: 0;
+  transform: translateX(24px);
 }
 </style>
