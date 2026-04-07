@@ -199,6 +199,54 @@
               </div>
             </div>
 
+            <!-- Audio Player -->
+            <div v-if="job.file_name" class="space-y-1.5">
+              <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>
+                Audio
+              </h4>
+              <audio
+                controls
+                class="w-full rounded-lg"
+                :src="getDownloadUrl(job.folder_name, job.file_name)"
+              />
+            </div>
+
+            <!-- Mind Map Visualization -->
+            <div v-if="jobDetails[job.folder_name].mindmap_svg || jobDetails[job.folder_name].mindmap_html" class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                  Mind Map
+                </h4>
+                <div class="flex gap-2">
+                  <a
+                    v-if="jobDetails[job.folder_name].mindmap_svg"
+                    :href="getDownloadUrl(job.folder_name, 'mindmap_svg')"
+                    download
+                    class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition flex items-center gap-1"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    SVG
+                  </a>
+                  <a
+                    v-if="jobDetails[job.folder_name].mindmap_html"
+                    :href="getDownloadUrl(job.folder_name, 'mindmap_html')"
+                    download
+                    class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition flex items-center gap-1"
+                  >
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    HTML
+                  </a>
+                </div>
+              </div>
+              <div
+                v-if="jobDetails[job.folder_name].mindmap_svg"
+                class="bg-white border border-slate-200 rounded-xl p-3 overflow-x-auto"
+                v-html="jobDetails[job.folder_name].mindmap_svg"
+              />
+            </div>
+
             <!-- Keywords -->
             <div
               v-if="jobDetails[job.folder_name].keywords?.length"
@@ -322,7 +370,9 @@ const normalizeDetail = (detail) => {
     ...detail,
     transcript: detail.transcript ?? detail.transcription ?? results.transcript ?? results.transcription ?? '',
     summary: detail.summary ?? results.summary ?? '',
-    keywords: detail.keywords ?? results.keywords ?? []
+    keywords: detail.keywords ?? results.keywords ?? [],
+    mindmap_svg: detail.mindmap_svg ?? results.mindmap_svg ?? '',
+    mindmap_html: detail.mindmap_html ?? results.mindmap_html ?? ''
   }
 }
 
