@@ -370,8 +370,16 @@ const reRunJob = async (job) => {
     if (step === 'visualize') {
       await visualizeJob(folderName, fileName)
     } else {
-      await summarizeJob(folderName, fileName)
-      await visualizeJob(folderName, fileName)
+      try {
+        await summarizeJob(folderName, fileName)
+      } catch (err) {
+        throw new Error(`Summarize step failed: ${err.message}`)
+      }
+      try {
+        await visualizeJob(folderName, fileName)
+      } catch (err) {
+        throw new Error(`Visualize step failed: ${err.message}`)
+      }
     }
     // Invalidate cached details and refresh the history list
     delete jobDetails[folderName]
