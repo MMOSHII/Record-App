@@ -13,6 +13,7 @@ const savedState = (() => {
 const state = reactive({
   token: savedState.token || '',
   user: savedState.user || null,
+  authMethod: savedState.authMethod || '',
   settings: {
     provider: savedState.settings?.provider || 'ollama',
     model: savedState.settings?.model || '',
@@ -47,6 +48,7 @@ watch(
 const logout = () => {
   state.token = ''
   state.user = null
+  state.authMethod = ''
   state.pipeline = {
     currentStep: 1,
     status: 'idle',
