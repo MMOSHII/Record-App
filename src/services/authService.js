@@ -36,7 +36,11 @@ export async function signInWithGoogleNative() {
     import.meta.env.VITE_GOOGLE_CLIENT_ID ||
     '710746488463-9ibge0al61j8sseikfde8c3ejc8h99uh.apps.googleusercontent.com'
 
-  const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth')
+  const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth').catch(() => {
+    throw new Error(
+      'Google Sign-In is not available. Please ensure the Capacitor plugin is properly installed.'
+    )
+  })
 
   await GoogleAuth.initialize({
     clientId: GOOGLE_CLIENT_ID,

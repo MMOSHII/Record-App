@@ -26,7 +26,7 @@
           :class="tab === 'basic' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
           @click="tab = 'basic'"
         >
-          Email &amp; Password
+          Email & Password
         </button>
       </div>
 
