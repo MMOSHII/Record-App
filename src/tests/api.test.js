@@ -169,15 +169,15 @@ describe('getHistory', () => {
 })
 
 describe('getDownloadUrl', () => {
-  it('builds a download URL with google_token for a given folder and file', async () => {
-    const url = api.getDownloadUrl('job_1', 'transcript')
-    expect(url).toContain('/api/v1/download/job_1/transcript')
+  it('builds a download URL with google_token for a given folder and file type', async () => {
+    const url = api.getDownloadUrl('job_1', 'transcript_txt')
+    expect(url).toContain('/api/v1/download/job_1/transcript_txt')
     expect(url).toContain('google_token=test-token')
   })
 
-  it('URL-encodes special characters in folder and file names', async () => {
-    const url = api.getDownloadUrl('job/1', 'my file.txt')
+  it('URL-encodes special characters in folder names', async () => {
+    const url = api.getDownloadUrl('job/1', 'audio')
     expect(url).toContain('job%2F1')
-    expect(url).toContain('my%20file.txt')
+    expect(url).toContain('/audio')
   })
 })
