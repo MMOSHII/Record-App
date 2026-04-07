@@ -31,9 +31,23 @@ from fastapi import HTTPException
 # =========================================================
 DB_PATH: str = os.getenv("AUTH_DB_PATH", "auth.db")
 
-JWT_SECRET: str = os.getenv("JWT_SECRET", "CHANGE_ME_IN_PRODUCTION_USE_A_LONG_RANDOM_STRING")
+_DEFAULT_JWT_SECRET = "CHANGE_ME_IN_PRODUCTION_USE_A_LONG_RANDOM_STRING"
+JWT_SECRET: str = os.getenv("JWT_SECRET", _DEFAULT_JWT_SECRET)
 JWT_ALGORITHM: str = "HS256"
 JWT_EXPIRES_HOURS: int = int(os.getenv("JWT_EXPIRES_HOURS", "24"))
+
+def _check_jwt_secret() -> None:
+    """
+    Raise a RuntimeError at startup if JWT_SECRET is unset or still the
+    insecure default value.  A leaked JWT secret allows an attacker to forge
+    authentication tokens for any user.
+    """
+    if not JWT_SECRET or JWT_SECRET == _DEFAULT_JWT_SECRET:
+        raise RuntimeError(
+            "JWT_SECRET is not configured.  "
+            "Set a strong random value in your .env file before starting the server.  "
+            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
 
 RESET_TOKEN_EXPIRES_MINUTES: int = 60
 
@@ -66,6 +80,7 @@ def _get_conn():
 
 def init_db() -> None:
     """Create tables if they do not exist. Call once at startup."""
+    _check_jwt_secret()
     with _get_conn() as conn:
         conn.execute(
             """
@@ -183,7 +198,13 @@ def verify_basic_token(token: str) -> str:
 # =========================================================
 
 def create_reset_token(user_id: str) -> str:
-    """Generate a secure reset token and persist it (expires in 60 min)."""
+    """
+    Generate a secure password-reset token and persist it.
+
+    32 bytes of cryptographic randomness gives 256 bits of entropy,
+    which is well above the NIST recommendation for single-use tokens
+    (at least 20 bytes / 112 bits of entropy).
+    """
     token = secrets.token_urlsafe(32)
     expires_at = (
         datetime.now(timezone.utc) + timedelta(minutes=RESET_TOKEN_EXPIRES_MINUTES)

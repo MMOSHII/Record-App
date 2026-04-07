@@ -208,6 +208,11 @@ const handleBasicLogin = async () => {
 onMounted(() => {
   if (isNative) return  // native path — no GIS needed
 
+  if (!GOOGLE_CLIENT_ID) {
+    console.warn('[Auth] VITE_GOOGLE_CLIENT_ID is not set. Google Sign-In is unavailable.')
+    return
+  }
+
   const initGoogle = () => {
     if (window.google?.accounts?.id) {
       window.google.accounts.id.initialize({

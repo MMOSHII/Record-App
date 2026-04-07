@@ -52,6 +52,13 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     auth.init_db()
+    if not GOOGLE_CLIENT_ID:
+        import warnings
+        warnings.warn(
+            "VITE_GOOGLE_CLIENT_ID / GOOGLE_CLIENT_ID is not set.  "
+            "Google Sign-In will be unavailable.",
+            stacklevel=1,
+        )
 
 
 # =========================================================
@@ -105,6 +112,20 @@ def _sanitize_name(value: str, label: str = "name") -> str:
     if not clean:
         raise HTTPException(status_code=400, detail=f"Invalid {label}.")
     return clean
+
+
+def _safe_file_suffix(raw_filename: Optional[str]) -> str:
+    """
+    Extract and sanitize the file extension from an uploaded filename.
+
+    Strips the leading dot, keeps only alphanumeric characters, and limits
+    the result to 8 characters to prevent crafted extensions from being used
+    as path components or carrying injection payloads.
+    Returns the suffix with its leading dot (e.g. '.mp3'), defaulting to '.audio'.
+    """
+    suffix = os.path.splitext(raw_filename or "")[1]
+    safe = "".join(c for c in suffix.lstrip(".") if c.isalnum())[:8]
+    return f".{safe}" if safe else ".audio"
 
 
 def _now_iso() -> str:
@@ -405,10 +426,7 @@ async def transcribe_audio(
         os.makedirs(job_dir, exist_ok=True)
 
         # Save uploaded file
-        orig_suffix = os.path.splitext(file.filename or "")[1] or ".audio"
-        # Restrict suffix to safe characters (alnum + dot) to prevent any
-        # injection via a crafted filename suffix
-        orig_suffix = "." + "".join(c for c in orig_suffix.lstrip(".") if c.isalnum())[:8] or ".audio"
+        orig_suffix = _safe_file_suffix(file.filename)
         tmp_path = _safe_join(job_dir, f"_upload{orig_suffix}")
         with open(tmp_path, "wb") as f_out:
             shutil.copyfileobj(file.file, f_out)
