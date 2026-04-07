@@ -369,7 +369,7 @@ const startPipeline = async () => {
     // Step 1: Upload + Transcribe
     const transcribeResult = await api.uploadAndTranscribe(selectedFile.value)
     pipeline.folderName = transcribeResult.folder_name || transcribeResult.folderName || ''
-    pipeline.fileName = selectedFile.value.name
+    pipeline.fileName = selectedFile.value.name.replace(/\.[^/.]+$/, "")
     pipeline.results = {
       ...pipeline.results,
       transcription: transcribeResult.transcript || transcribeResult.transcription || ''
