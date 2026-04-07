@@ -8,6 +8,21 @@ const routes = [
     meta: { title: 'Sign In', depth: 0 }
   },
   {
+    path: '/signup',
+    component: () => import('../views/Signup.vue'),
+    meta: { title: 'Create Account', depth: 0 }
+  },
+  {
+    path: '/forgot-password',
+    component: () => import('../views/ForgotPassword.vue'),
+    meta: { title: 'Forgot Password', depth: 0 }
+  },
+  {
+    path: '/reset-password',
+    component: () => import('../views/ResetPassword.vue'),
+    meta: { title: 'Reset Password', depth: 0 }
+  },
+  {
     path: '/',
     component: () => import('../views/Home.vue'),
     meta: { requiresAuth: true, title: 'Pipeline', depth: 1 }
@@ -36,12 +51,14 @@ const router = createRouter({
   }
 })
 
+const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password']
+
 router.beforeEach((to, from, next) => {
   const { state } = useAppStore()
 
   if (to.meta.requiresAuth && !state.token) {
     next('/login')
-  } else if (to.path === '/login' && state.token) {
+  } else if (PUBLIC_PATHS.includes(to.path) && state.token) {
     next('/')
   } else {
     next()
