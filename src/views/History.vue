@@ -75,9 +75,12 @@
         class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
       >
         <!-- Job Header -->
-        <button
+        <div
           @click="toggleJob(job.folder_name)"
-          class="w-full flex items-start justify-between p-5 text-left hover:bg-slate-50 transition"
+          @keydown.enter="toggleJob(job.folder_name)"
+          role="button"
+          tabindex="0"
+          class="w-full flex items-start justify-between p-5 text-left hover:bg-slate-50 transition cursor-pointer"
         >
           <div>
             <div class="flex items-center gap-2 flex-wrap">
@@ -98,16 +101,34 @@
               {{ formatDate(job.created_at) }}
             </p>
           </div>
-          <svg
-            class="w-5 h-5 text-slate-400 mt-1 flex-shrink-0 transition-transform"
-            :class="expandedJobs.has(job.folder_name) ? 'rotate-180' : ''"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+          <div class="flex items-center gap-2 mt-1 flex-shrink-0">
+            <!-- Re-run button (only for pending jobs) -->
+            <button
+              v-if="isPending(job)"
+              @click.stop="reRunJob(job)"
+              :disabled="reRunning[job.folder_name]"
+              class="flex items-center gap-1 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-xs font-semibold px-2.5 py-1 rounded-lg transition"
+            >
+              <svg v-if="reRunning[job.folder_name]" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {{ reRunning[job.folder_name] ? 'Running…' : 'Re-run' }}
+            </button>
+            <svg
+              class="w-5 h-5 text-slate-400 flex-shrink-0 transition-transform"
+              :class="expandedJobs.has(job.folder_name) ? 'rotate-180' : ''"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
 
         <!-- Job Details (expanded) -->
         <div
@@ -123,7 +144,19 @@
             Loading details…
           </div>
 
+          <!-- Detail load error -->
+          <div v-else-if="jobDetails[job.folder_name]?.error" class="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700 font-semibold flex items-center gap-2">
+            <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            {{ jobDetails[job.folder_name].error }}
+          </div>
+
           <template v-else-if="jobDetails[job.folder_name]">
+            <!-- Re-run error -->
+            <div v-if="reRunError[job.folder_name]" class="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700 font-semibold flex items-center gap-2">
+              <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+              {{ reRunError[job.folder_name] }}
+            </div>
+
             <!-- Transcription -->
             <div v-if="jobDetails[job.folder_name].transcript" class="space-y-1.5">
               <div class="flex items-center justify-between">
@@ -212,7 +245,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useAppStore } from '../stores/appStore'
-import { getHistory, getJob, getDownloadUrl } from '../services/api.js'
+import { getHistory, getJob, getDownloadUrl, summarizeJob, visualizeJob } from '../services/api.js'
 
 const store = useAppStore()
 
@@ -221,6 +254,8 @@ const loading = ref(false)
 const error = ref('')
 const expandedJobs = reactive(new Set())
 const jobDetails = reactive({})
+const reRunning = reactive({})
+const reRunError = reactive({})
 
 const artifactList = [
   { file: 'transcript', label: 'Transcript' },
@@ -236,7 +271,8 @@ const statusClass = (status) => {
     error: 'bg-red-100 text-red-700',
     failed: 'bg-red-100 text-red-700',
     running: 'bg-indigo-100 text-indigo-700',
-    processing: 'bg-indigo-100 text-indigo-700'
+    processing: 'bg-indigo-100 text-indigo-700',
+    pending: 'bg-amber-100 text-amber-700'
   }
   const normalized =
     typeof status === 'string' ? status
@@ -261,6 +297,32 @@ const formatDate = (dateStr) => {
     }).format(new Date(dateStr))
   } catch {
     return dateStr
+  }
+}
+
+const isPending = (job) => {
+  const status = job.status
+  if (!status) return false
+  if (typeof status === 'string') return status.toLowerCase() === 'pending'
+  return Object.values(status).some(v => String(v).toLowerCase() === 'pending')
+}
+
+const getPendingStep = (job) => {
+  const status = job.status
+  if (typeof status === 'object' && status !== null) {
+    if (String(status.summarize || '').toLowerCase() === 'pending') return 'summarize'
+    if (String(status.visualize || '').toLowerCase() === 'pending') return 'visualize'
+  }
+  return 'summarize'
+}
+
+const normalizeDetail = (detail) => {
+  const results = detail.results || {}
+  return {
+    ...detail,
+    transcript: detail.transcript ?? detail.transcription ?? results.transcript ?? results.transcription ?? '',
+    summary: detail.summary ?? results.summary ?? '',
+    keywords: detail.keywords ?? results.keywords ?? []
   }
 }
 
@@ -289,10 +351,45 @@ const toggleJob = async (folderName) => {
     jobDetails[folderName] = { loading: true }
     try {
       const detail = await getJob(folderName)
-      jobDetails[folderName] = detail
+      jobDetails[folderName] = normalizeDetail(detail)
     } catch (err) {
       jobDetails[folderName] = { error: err.message }
     }
+  }
+}
+
+const reRunJob = async (job) => {
+  const folderName = job.folder_name
+  const fileName = job.file_name || ''
+  const step = getPendingStep(job)
+
+  reRunning[folderName] = true
+  reRunError[folderName] = ''
+
+  try {
+    if (step === 'visualize') {
+      await visualizeJob(folderName, fileName)
+    } else {
+      try {
+        await summarizeJob(folderName, fileName)
+      } catch (err) {
+        throw new Error(`Summarize step failed: ${err.message}`)
+      }
+      try {
+        await visualizeJob(folderName, fileName)
+      } catch (err) {
+        throw new Error(`Visualize step failed: ${err.message}`)
+      }
+    }
+    // Invalidate cached details and refresh the history list
+    delete jobDetails[folderName]
+    await loadHistory()
+    // Collapse the job row so the updated status badge is clearly visible
+    expandedJobs.delete(folderName)
+  } catch (err) {
+    reRunError[folderName] = err.message
+  } finally {
+    reRunning[folderName] = false
   }
 }
 

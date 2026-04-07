@@ -9,7 +9,8 @@ function statusClass(status) {
     error: 'bg-red-100 text-red-700',
     failed: 'bg-red-100 text-red-700',
     running: 'bg-indigo-100 text-indigo-700',
-    processing: 'bg-indigo-100 text-indigo-700'
+    processing: 'bg-indigo-100 text-indigo-700',
+    pending: 'bg-amber-100 text-amber-700'
   }
   const normalized =
     typeof status === 'string' ? status
@@ -68,8 +69,11 @@ describe('History – statusClass()', () => {
     expect(statusClass('Running')).toBe('bg-indigo-100 text-indigo-700')
   })
 
+  it('returns amber classes for "pending"', () => {
+    expect(statusClass('pending')).toBe('bg-amber-100 text-amber-700')
+  })
+
   it('returns slate fallback for unknown string status', () => {
-    expect(statusClass('pending')).toBe('bg-slate-100 text-slate-600')
     expect(statusClass('unknown')).toBe('bg-slate-100 text-slate-600')
   })
 
