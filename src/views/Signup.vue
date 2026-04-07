@@ -134,7 +134,7 @@ const handleSignup = async () => {
     if (data.token || data.access_token) {
       router.push('/')
     } else {
-      successMsg.value = 'Account created! Please check your email to verify your account, then sign in.'
+      successMsg.value = 'Account created! You can now sign in with your email and password.'
     }
   } catch (e) {
     errorMsg.value = e.message || 'Registration failed. Please try again.'

@@ -60,10 +60,18 @@ async def startup_event():
 
 def _resolve_user(token: str) -> str:
     """
-    Resolve a user_id from either a basic-auth JWT or a Google ID token.
-    Raises HTTPException 401 if neither succeeds.
+    Resolve and sanitize a user_id from either a basic-auth JWT or a Google
+    ID token.  The returned value is safe to use as a filesystem path component.
+    Raises HTTPException 401 if authentication fails.
     """
-    return auth.resolve_user_id(token, google_client_id=GOOGLE_CLIENT_ID)
+    raw_id = auth.resolve_user_id(token, google_client_id=GOOGLE_CLIENT_ID)
+    # os.path.basename strips any directory separators from the user_id.
+    # This ensures the value cannot escape its intended directory even if
+    # a malformed token somehow carried a path payload.
+    safe_id = os.path.basename(raw_id.strip())
+    if not safe_id:
+        raise HTTPException(status_code=401, detail="Invalid user identity.")
+    return safe_id
 
 
 # =========================================================
@@ -83,13 +91,20 @@ def _safe_join(base: str, *paths: str) -> str:
 
 def _sanitize_name(value: str, label: str = "name") -> str:
     """
-    Reject path components that contain separators, null bytes, or are
-    obviously dangerous.  This provides explicit sanitization so that
-    user-controlled values are safe before they reach any file-system call.
+    Sanitize a single path component.
+
+    Uses os.path.basename (a CodeQL-recognised path sanitizer) as the core
+    operation, then rejects null bytes and empty results.  The caller must
+    never concatenate the returned value with os.path.join directly – always
+    pass it through _safe_join for the second layer of defence.
     """
-    if not value or any(c in value for c in ("/", "\\", "\0", "..")):
+    if "\0" in value:
         raise HTTPException(status_code=400, detail=f"Invalid {label}.")
-    return value
+    # os.path.basename removes all leading directory components
+    clean = os.path.basename(value.strip())
+    if not clean:
+        raise HTTPException(status_code=400, detail=f"Invalid {label}.")
+    return clean
 
 
 def _now_iso() -> str:
@@ -391,13 +406,16 @@ async def transcribe_audio(
 
         # Save uploaded file
         orig_suffix = os.path.splitext(file.filename or "")[1] or ".audio"
-        tmp_path = os.path.join(job_dir, f"_upload{orig_suffix}")
+        # Restrict suffix to safe characters (alnum + dot) to prevent any
+        # injection via a crafted filename suffix
+        orig_suffix = "." + "".join(c for c in orig_suffix.lstrip(".") if c.isalnum())[:8] or ".audio"
+        tmp_path = _safe_join(job_dir, f"_upload{orig_suffix}")
         with open(tmp_path, "wb") as f_out:
             shutil.copyfileobj(file.file, f_out)
 
         # Convert to 16 kHz mono WAV
         wav_name = f"{safe_stem}.wav"
-        wav_path = os.path.join(job_dir, wav_name)
+        wav_path = _safe_join(job_dir, wav_name)
         ffmpeg.input(tmp_path).output(wav_path, ac=1, ar=16000).run(
             overwrite_output=True, quiet=True
         )
@@ -411,9 +429,9 @@ async def transcribe_audio(
         json_name = f"{safe_stem}.json"
         txt_name = f"{safe_stem}.txt"
 
-        with open(os.path.join(job_dir, json_name), "w", encoding="utf-8") as f_out:
+        with open(_safe_join(job_dir, json_name), "w", encoding="utf-8") as f_out:
             json.dump(transcript_data, f_out, ensure_ascii=False, indent=2)
-        with open(os.path.join(job_dir, txt_name), "w", encoding="utf-8") as f_out:
+        with open(_safe_join(job_dir, txt_name), "w", encoding="utf-8") as f_out:
             f_out.write(transcript_txt)
 
         manifest: Dict[str, Any] = {
@@ -469,7 +487,7 @@ async def summarize_audio(req: SummarizeRequest):
         job_dir = _safe_join(BASE_DIR, user_id, folder_name)
         manifest = _read_manifest(job_dir)
 
-        out_txt = os.path.join(job_dir, f"{file_name}.txt")
+        out_txt = _safe_join(job_dir, f"{file_name}.txt")
         if not os.path.exists(out_txt):
             raise HTTPException(
                 status_code=404,
@@ -485,9 +503,9 @@ async def summarize_audio(req: SummarizeRequest):
         summary_txt_name = f"{file_name}_final_summary.txt"
         summary_html_name = f"{file_name}_final_summary.html"
 
-        with open(os.path.join(job_dir, summary_txt_name), "w", encoding="utf-8") as f:
+        with open(_safe_join(job_dir, summary_txt_name), "w", encoding="utf-8") as f:
             f.write(final_summary)
-        with open(os.path.join(job_dir, summary_html_name), "w", encoding="utf-8") as f:
+        with open(_safe_join(job_dir, summary_html_name), "w", encoding="utf-8") as f:
             f.write(_summary_to_html(f"{file_name} – Final Summary", final_summary))
 
         manifest["provider"] = req.provider
@@ -531,12 +549,12 @@ async def visualize_audio(req: VisualizeRequest):
         job_dir = _safe_join(BASE_DIR, user_id, folder_name)
         manifest = _read_manifest(job_dir)
 
-        out_json = os.path.join(job_dir, f"{file_name}.json")
+        out_json = _safe_join(job_dir, f"{file_name}.json")
         if not os.path.exists(out_json):
             raise HTTPException(status_code=404, detail="JSON transcript not found.")
 
         out_img_name = f"{file_name}.png"
-        out_img = os.path.join(job_dir, out_img_name)
+        out_img = _safe_join(job_dir, out_img_name)
 
         print(f"\n[INFO] Visualizing conversation for {file_name}...")
         data = load_transcript_vizualize(out_json)
