@@ -166,7 +166,7 @@
                 </h4>
                 <a
                   v-if="job.file_name"
-                  :href="getDownloadUrl(job.folder_name, baseName(job.file_name) + '.txt')"
+                  :href="getDownloadUrl(job.folder_name, 'transcript_txt')"
                   download
                   class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition flex items-center gap-1"
                 >
@@ -188,7 +188,7 @@
                 </h4>
                 <div v-if="job.file_name" class="flex gap-2">
                   <a
-                    :href="getDownloadUrl(job.folder_name, baseName(job.file_name) + '_final_summary.txt')"
+                    :href="getDownloadUrl(job.folder_name, 'summary_txt')"
                     download
                     class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition flex items-center gap-1"
                   >
@@ -196,7 +196,7 @@
                     TXT
                   </a>
                   <a
-                    :href="getDownloadUrl(job.folder_name, baseName(job.file_name) + '_final_summary.html')"
+                    :href="getDownloadUrl(job.folder_name, 'summary_html')"
                     download
                     class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition flex items-center gap-1"
                   >
@@ -219,7 +219,7 @@
               <audio
                 controls
                 class="w-full rounded-lg"
-                :src="getDownloadUrl(job.folder_name, baseName(job.file_name) + '.wav')"
+                :src="getDownloadUrl(job.folder_name, 'audio')"
               />
             </div>
 
@@ -231,7 +231,7 @@
                   Visualization
                 </h4>
                 <a
-                  :href="getDownloadUrl(job.folder_name, baseName(job.file_name) + '.png')"
+                  :href="getDownloadUrl(job.folder_name, 'image')"
                   download
                   class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition flex items-center gap-1"
                 >
@@ -240,7 +240,7 @@
                 </a>
               </div>
               <img
-                :src="getDownloadUrl(job.folder_name, baseName(job.file_name) + '.png')"
+                :src="getDownloadUrl(job.folder_name, 'image')"
                 class="w-full rounded-xl border border-slate-200"
                 alt="Visualization"
                 @error="$event.target.style.display = 'none'"
@@ -274,8 +274,8 @@
               <div class="flex flex-wrap gap-2">
                 <a
                   v-for="artifact in artifactsForJob(job)"
-                  :key="artifact.file"
-                  :href="getDownloadUrl(job.folder_name, artifact.file)"
+                  :key="artifact.fileType"
+                  :href="getDownloadUrl(job.folder_name, artifact.fileType)"
                   download
                   class="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-lg transition"
                 >
@@ -294,7 +294,6 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useAppStore } from '../stores/appStore'
 import { getHistory, getJob, getDownloadUrl, summarizeJob, visualizeJob } from '../services/api.js'
-import { baseName } from '../utils/fileUtils.js'
 
 const store = useAppStore()
 
@@ -307,16 +306,14 @@ const reRunning = reactive({})
 const reRunError = reactive({})
 
 const artifactsForJob = (job) => {
-  const base = baseName(job.file_name)
-  if (!base) return []
+  if (!job.file_name) return []
   return [
-    { file: `${base}.wav`, label: 'Audio (WAV)' },
-    { file: `${base}.txt`, label: 'Transcript (TXT)' },
-    { file: `${base}.json`, label: 'Transcript (JSON)' },
-    { file: `${base}.png`, label: 'Visualization (PNG)' },
-    { file: `${base}_final_summary.txt`, label: 'Summary (TXT)' },
-    { file: `${base}_final_summary.html`, label: 'Summary (HTML)' },
-    { file: 'manifest.json', label: 'Manifest' }
+    { fileType: 'audio', label: 'Audio (WAV)' },
+    { fileType: 'transcript_txt', label: 'Transcript (TXT)' },
+    { fileType: 'transcript_json', label: 'Transcript (JSON)' },
+    { fileType: 'image', label: 'Visualization (PNG)' },
+    { fileType: 'summary_txt', label: 'Summary (TXT)' },
+    { fileType: 'summary_html', label: 'Summary (HTML)' }
   ]
 }
 

@@ -324,7 +324,6 @@ import { ref, computed } from 'vue'
 import Stepper from '../components/Stepper.vue'
 import { useAppStore } from '../stores/appStore'
 import * as api from '../services/api.js'
-import { baseName } from '../utils/fileUtils.js'
 
 const store = useAppStore()
 const pipeline = store.state.pipeline
@@ -363,11 +362,10 @@ const formatSize = (bytes) => {
 }
 
 const downloadUrl = (type) => {
-  const base = baseName(pipeline.fileName)
-  if (type === 'transcript') return api.getDownloadUrl(pipeline.folderName, `${base}.txt`)
-  if (type === 'summary') return api.getDownloadUrl(pipeline.folderName, `${base}_final_summary.txt`)
-  if (type === 'summary_html') return api.getDownloadUrl(pipeline.folderName, `${base}_final_summary.html`)
-  if (type === 'mindmap_png') return api.getDownloadUrl(pipeline.folderName, `${base}.png`)
+  if (type === 'transcript') return api.getDownloadUrl(pipeline.folderName, 'transcript_txt')
+  if (type === 'summary') return api.getDownloadUrl(pipeline.folderName, 'summary_txt')
+  if (type === 'summary_html') return api.getDownloadUrl(pipeline.folderName, 'summary_html')
+  if (type === 'mindmap_png') return api.getDownloadUrl(pipeline.folderName, 'image')
   return api.getDownloadUrl(pipeline.folderName, type)
 }
 
