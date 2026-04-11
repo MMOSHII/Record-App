@@ -58,7 +58,7 @@ const props = defineProps({
 })
 
 const steps = [
-  { id: 1, label: 'Upload' },
+  { id: 1, label: 'Upload / Record' },
   { id: 2, label: 'Transcribe' },
   { id: 3, label: 'Summarize' },
   { id: 4, label: 'Visualize' }
