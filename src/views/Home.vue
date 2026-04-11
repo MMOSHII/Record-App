@@ -145,22 +145,29 @@
         </div>
 
         <!-- Recording in progress -->
-        <div v-else-if="isRecording" class="flex flex-col items-center gap-4 py-6">
-          <div class="flex items-center gap-3">
-            <span class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></span>
-            <span class="text-lg font-mono font-bold text-slate-800">{{ formatRecordingTime(recordingSeconds) }}</span>
+        <div v-else-if="isRecording" class="space-y-3">
+          <!-- Audio spectrum visualizer -->
+          <AudioSpectrum :stream="micStream" :active="isRecording" />
+
+          <!-- Timer + Stop row -->
+          <div class="flex items-center justify-between px-1">
+            <div class="flex items-center gap-2">
+              <span class="text-base font-mono font-bold text-slate-800 tabular-nums">
+                {{ formatRecordingTime(recordingSeconds) }}
+              </span>
+              <span class="text-xs text-slate-400">Recording…</span>
+            </div>
+            <button
+              @click="stopRecording"
+              class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold transition flex items-center gap-2"
+              aria-label="Stop recording"
+            >
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <rect x="6" y="6" width="12" height="12" rx="2"/>
+              </svg>
+              Stop
+            </button>
           </div>
-          <p class="text-xs text-slate-500">Recording in progress…</p>
-          <button
-            @click="stopRecording"
-            class="px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold transition flex items-center gap-2"
-            aria-label="Stop recording"
-          >
-            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <rect x="6" y="6" width="12" height="12" rx="2"/>
-            </svg>
-            Stop Recording
-          </button>
         </div>
 
         <!-- Recording done: preview + actions -->
@@ -415,6 +422,7 @@
 <script setup>
 import { ref, computed, onUnmounted } from 'vue'
 import Stepper from '../components/Stepper.vue'
+import AudioSpectrum from '../components/AudioSpectrum.vue'
 import { useAppStore } from '../stores/appStore'
 import * as api from '../services/api.js'
 
@@ -435,7 +443,7 @@ const recordError = ref('')
 let mediaRecorder = null
 let audioChunks = []
 let recordingTimer = null
-let micStream = null
+const micStream = ref(null)
 
 const canStartPipeline = computed(() =>
   inputMode.value === 'upload' ? !!selectedFile.value : !!audioBlob.value
@@ -489,7 +497,7 @@ const startRecording = async () => {
   recordError.value = ''
   audioChunks = []
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    micStream.value = await navigator.mediaDevices.getUserMedia({ audio: true })
   } catch (err) {
     console.error('Microphone access error:', err)
     recordError.value = 'Microphone access denied. Please allow microphone permissions and try again.'
@@ -503,8 +511,8 @@ const startRecording = async () => {
       : ''
 
   mediaRecorder = mimeType
-    ? new MediaRecorder(micStream, { mimeType })
-    : new MediaRecorder(micStream)
+    ? new MediaRecorder(micStream.value, { mimeType })
+    : new MediaRecorder(micStream.value)
 
   mediaRecorder.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) audioChunks.push(e.data)
@@ -544,9 +552,9 @@ const discardRecording = () => {
 }
 
 const releaseMicStream = () => {
-  if (micStream) {
-    micStream.getTracks().forEach((t) => t.stop())
-    micStream = null
+  if (micStream.value) {
+    micStream.value.getTracks().forEach((t) => t.stop())
+    micStream.value = null
   }
 }
 
