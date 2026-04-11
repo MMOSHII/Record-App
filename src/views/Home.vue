@@ -42,59 +42,152 @@
       >×</button>
     </div>
 
-    <!-- Upload Section (Step 1) -->
+    <!-- Upload / Record Section (Step 1) -->
     <div
       v-if="pipeline.currentStep === 1 || !pipeline.folderName"
       class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6"
     >
-      <h2 class="text-base font-bold text-slate-900 mb-4">1. Select Audio File</h2>
+      <h2 class="text-base font-bold text-slate-900 mb-4">1. Provide Audio</h2>
 
-      <div
-        class="border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer"
-        :class="dragOver
-          ? 'border-indigo-400 bg-indigo-50'
-          : 'border-slate-300 hover:border-indigo-300 hover:bg-slate-50'"
-        @dragover.prevent="dragOver = true"
-        @dragleave="dragOver = false"
-        @drop.prevent="onDrop"
-        @click="fileInputRef.click()"
-      >
-        <input
-          ref="fileInputRef"
-          type="file"
-          accept="audio/*,video/mp4,video/mpeg,video/webm"
-          class="hidden"
-          @change="onFileChange"
-        />
-        <div v-if="!selectedFile">
-          <div class="flex justify-center mb-2">
-            <svg class="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <!-- Mode Toggle -->
+      <div class="flex rounded-xl overflow-hidden border border-slate-200 mb-5 text-sm font-semibold">
+        <button
+          @click="switchMode('upload')"
+          class="flex-1 py-2 flex items-center justify-center gap-1.5 transition"
+          :class="inputMode === 'upload'
+            ? 'bg-indigo-600 text-white'
+            : 'bg-white text-slate-500 hover:bg-slate-50'"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+          </svg>
+          Upload File
+        </button>
+        <button
+          @click="switchMode('record')"
+          class="flex-1 py-2 flex items-center justify-center gap-1.5 transition"
+          :class="inputMode === 'record'
+            ? 'bg-indigo-600 text-white'
+            : 'bg-white text-slate-500 hover:bg-slate-50'"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+          </svg>
+          Record Audio
+        </button>
+      </div>
+
+      <!-- Upload Mode -->
+      <div v-if="inputMode === 'upload'">
+        <div
+          class="border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer"
+          :class="dragOver
+            ? 'border-indigo-400 bg-indigo-50'
+            : 'border-slate-300 hover:border-indigo-300 hover:bg-slate-50'"
+          @dragover.prevent="dragOver = true"
+          @dragleave="dragOver = false"
+          @drop.prevent="onDrop"
+          @click="fileInputRef.click()"
+        >
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept="audio/*,video/mp4,video/mpeg,video/webm"
+            class="hidden"
+            @change="onFileChange"
+          />
+          <div v-if="!selectedFile">
+            <div class="flex justify-center mb-2">
+              <svg class="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
+              </svg>
+            </div>
+            <p class="text-sm font-semibold text-slate-700">Drop your audio file here</p>
+            <p class="text-xs text-slate-400 mt-1">or click to browse</p>
+            <p class="text-xs text-slate-400 mt-2">Supports MP3, WAV, M4A, OGG, FLAC, MP4...</p>
+          </div>
+          <div v-else class="flex items-center justify-center gap-3">
+            <svg class="w-6 h-6 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
             </svg>
+            <div class="text-left">
+              <p class="text-sm font-semibold text-slate-800">{{ selectedFile.name }}</p>
+              <p class="text-xs text-slate-400">{{ formatSize(selectedFile.size) }}</p>
+            </div>
+            <button
+              @click.stop="clearFile"
+              class="ml-2 text-slate-400 hover:text-red-500 transition text-xl leading-none"
+              aria-label="Remove file"
+            >×</button>
           </div>
-          <p class="text-sm font-semibold text-slate-700">Drop your audio file here</p>
-          <p class="text-xs text-slate-400 mt-1">or click to browse</p>
-          <p class="text-xs text-slate-400 mt-2">Supports MP3, WAV, M4A, OGG, FLAC, MP4...</p>
         </div>
-        <div v-else class="flex items-center justify-center gap-3">
-          <svg class="w-6 h-6 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
-          </svg>
-          <div class="text-left">
-            <p class="text-sm font-semibold text-slate-800">{{ selectedFile.name }}</p>
-            <p class="text-xs text-slate-400">{{ formatSize(selectedFile.size) }}</p>
-          </div>
+      </div>
+
+      <!-- Record Mode -->
+      <div v-else class="space-y-4">
+        <!-- Mic permission error -->
+        <div v-if="recordError" class="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-600 font-medium">
+          {{ recordError }}
+        </div>
+
+        <!-- Idle: show start button -->
+        <div v-if="!isRecording && !audioBlob" class="flex flex-col items-center gap-3 py-6">
           <button
-            @click.stop="clearFile"
-            class="ml-2 text-slate-400 hover:text-red-500 transition text-xl leading-none"
-            aria-label="Remove file"
-          >×</button>
+            @click="startRecording"
+            class="w-20 h-20 rounded-full bg-red-500 hover:bg-red-600 active:scale-95 transition flex items-center justify-center shadow-lg"
+            aria-label="Start recording"
+          >
+            <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 1a4 4 0 014 4v7a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v7a2 2 0 004 0V5a2 2 0 00-2-2zM8.5 19.5A7.5 7.5 0 0019 12h2a9.5 9.5 0 01-9.5 9.5v2h-1v-2A9.5 9.5 0 013 12h2a7.5 7.5 0 005.5 7.326V21H8.5v-1.5z"/>
+            </svg>
+          </button>
+          <p class="text-sm text-slate-500">Tap to start recording</p>
+        </div>
+
+        <!-- Recording in progress -->
+        <div v-else-if="isRecording" class="flex flex-col items-center gap-4 py-6">
+          <div class="flex items-center gap-3">
+            <span class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></span>
+            <span class="text-lg font-mono font-bold text-slate-800">{{ formatRecordingTime(recordingSeconds) }}</span>
+          </div>
+          <p class="text-xs text-slate-500">Recording in progress…</p>
+          <button
+            @click="stopRecording"
+            class="px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold transition flex items-center gap-2"
+            aria-label="Stop recording"
+          >
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <rect x="6" y="6" width="12" height="12" rx="2"/>
+            </svg>
+            Stop Recording
+          </button>
+        </div>
+
+        <!-- Recording done: preview + actions -->
+        <div v-else-if="audioBlob" class="space-y-3">
+          <div class="bg-slate-50 rounded-xl p-4 flex flex-col gap-3">
+            <div class="flex items-center gap-2 text-sm text-slate-700 font-semibold">
+              <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+              </svg>
+              Recording ready ({{ formatRecordingTime(recordingSeconds) }})
+            </div>
+            <audio :src="audioBlobUrl" controls class="w-full h-10 rounded"></audio>
+          </div>
+          <div class="flex gap-2">
+            <button
+              @click="discardRecording"
+              class="flex-1 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition"
+            >
+              Discard
+            </button>
+          </div>
         </div>
       </div>
 
       <button
         @click="startPipeline"
-        :disabled="!selectedFile || pipeline.status === 'running'"
+        :disabled="!canStartPipeline || pipeline.status === 'running'"
         class="mt-4 w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2"
       >
         <span v-if="pipeline.status === 'running'" class="flex items-center gap-2">
@@ -320,7 +413,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import Stepper from '../components/Stepper.vue'
 import { useAppStore } from '../stores/appStore'
 import * as api from '../services/api.js'
@@ -331,6 +424,31 @@ const pipeline = store.state.pipeline
 const fileInputRef = ref(null)
 const selectedFile = ref(null)
 const dragOver = ref(false)
+
+// Record mode state
+const inputMode = ref('upload') // 'upload' | 'record'
+const isRecording = ref(false)
+const audioBlob = ref(null)
+const audioBlobUrl = ref(null)
+const recordingSeconds = ref(0)
+const recordError = ref('')
+let mediaRecorder = null
+let audioChunks = []
+let recordingTimer = null
+let micStream = null
+
+const canStartPipeline = computed(() =>
+  inputMode.value === 'upload' ? !!selectedFile.value : !!audioBlob.value
+)
+
+const switchMode = (mode) => {
+  inputMode.value = mode
+  if (mode === 'upload') {
+    discardRecording()
+  } else {
+    clearFile()
+  }
+}
 
 const statusBadgeClass = computed(() => {
   const s = pipeline.status
@@ -361,6 +479,82 @@ const formatSize = (bytes) => {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+const formatRecordingTime = (seconds) => {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0')
+  const s = (seconds % 60).toString().padStart(2, '0')
+  return `${m}:${s}`
+}
+
+const startRecording = async () => {
+  recordError.value = ''
+  audioChunks = []
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  } catch (err) {
+    console.error('Microphone access error:', err)
+    recordError.value = 'Microphone access denied. Please allow microphone permissions and try again.'
+    return
+  }
+
+  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? 'audio/webm;codecs=opus'
+    : MediaRecorder.isTypeSupported('audio/webm')
+      ? 'audio/webm'
+      : ''
+
+  mediaRecorder = mimeType
+    ? new MediaRecorder(micStream, { mimeType })
+    : new MediaRecorder(micStream)
+
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) audioChunks.push(e.data)
+  }
+
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' })
+    audioBlob.value = blob
+    audioBlobUrl.value = URL.createObjectURL(blob)
+    releaseMicStream()
+  }
+
+  mediaRecorder.start(250)
+  isRecording.value = true
+  recordingSeconds.value = 0
+  recordingTimer = setInterval(() => { recordingSeconds.value++ }, 1000)
+}
+
+const stopRecording = () => {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop()
+  }
+  clearInterval(recordingTimer)
+  recordingTimer = null
+  isRecording.value = false
+}
+
+const discardRecording = () => {
+  stopRecording()
+  if (audioBlobUrl.value) {
+    URL.revokeObjectURL(audioBlobUrl.value)
+    audioBlobUrl.value = null
+  }
+  audioBlob.value = null
+  recordingSeconds.value = 0
+  recordError.value = ''
+}
+
+const releaseMicStream = () => {
+  if (micStream) {
+    micStream.getTracks().forEach((t) => t.stop())
+    micStream = null
+  }
+}
+
+onUnmounted(() => {
+  discardRecording()
+  releaseMicStream()
+})
+
 const downloadUrl = (type) => {
   if (type === 'transcript') return api.getDownloadUrl(pipeline.folderName, 'transcript_txt')
   if (type === 'summary') return api.getDownloadUrl(pipeline.folderName, 'summary_txt')
@@ -370,7 +564,16 @@ const downloadUrl = (type) => {
 }
 
 const startPipeline = async () => {
-  if (!selectedFile.value) return
+  let fileToUpload = selectedFile.value
+
+  if (inputMode.value === 'record') {
+    if (!audioBlob.value) return
+    const ext = audioBlob.value.type.includes('webm') ? 'webm' : 'wav'
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    fileToUpload = new File([audioBlob.value], `recording-${timestamp}.${ext}`, { type: audioBlob.value.type })
+  }
+
+  if (!fileToUpload) return
 
   pipeline.status = 'running'
   pipeline.currentStep = 1
@@ -378,9 +581,9 @@ const startPipeline = async () => {
 
   try {
     // Step 1: Upload + Transcribe
-    const transcribeResult = await api.uploadAndTranscribe(selectedFile.value)
+    const transcribeResult = await api.uploadAndTranscribe(fileToUpload)
     pipeline.folderName = transcribeResult.folder_name || transcribeResult.folderName || ''
-    pipeline.fileName = selectedFile.value.name.replace(/\.[^/.]+$/, "")
+    pipeline.fileName = fileToUpload.name.replace(/\.[^/.]+$/, "")
     pipeline.results = {
       ...pipeline.results,
       transcription: transcribeResult.transcript || transcribeResult.transcription || ''
