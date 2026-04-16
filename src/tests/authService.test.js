@@ -103,6 +103,49 @@ describe('loginBasic()', () => {
 })
 
 // ---------------------------------------------------------------------------
+// loginWithApiToken
+// ---------------------------------------------------------------------------
+describe('loginWithApiToken()', () => {
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
+  it('sets token, user and authMethod for API token sign-in', async () => {
+    const store = await freshStore()
+    const { loginWithApiToken } = await import('../services/authService.js')
+
+    loginWithApiToken('my-api-token', 'Personal API', 'me@example.com')
+
+    expect(store.state.token).toBe('my-api-token')
+    expect(store.state.user).toEqual({
+      name: 'Personal API',
+      email: 'me@example.com',
+      picture: ''
+    })
+    expect(store.state.authMethod).toBe('api')
+  })
+
+  it('trims token and falls back to default name when blank', async () => {
+    const store = await freshStore()
+    const { loginWithApiToken } = await import('../services/authService.js')
+
+    loginWithApiToken('  my-api-token  ', '   ', '  ')
+
+    expect(store.state.token).toBe('my-api-token')
+    expect(store.state.user.name).toBe('API User')
+    expect(store.state.user.email).toBe('')
+    expect(store.state.authMethod).toBe('api')
+  })
+
+  it('throws when token is empty', async () => {
+    await freshStore()
+    const { loginWithApiToken } = await import('../services/authService.js')
+
+    expect(() => loginWithApiToken('   ')).toThrow('API token is required.')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // registerBasic
 // ---------------------------------------------------------------------------
 describe('registerBasic()', () => {
