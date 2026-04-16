@@ -280,7 +280,7 @@ const handleApiTokenLogin = async () => {
     loginWithApiToken(apiToken.value, apiDisplayName.value, apiEmail.value)
     router.push('/')
   } catch (e) {
-    errorMsg.value = e.message || 'API token login failed.'
+    errorMsg.value = e.message || 'Invalid API token. Please check your token and try again.'
   } finally {
     loading.value = false
   }
