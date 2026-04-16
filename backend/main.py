@@ -29,6 +29,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, EmailStr, field_validator
 
 import auth
+from tools import extract_records, generate_timeline, json_to_txt, load_transcript_vizualize
+from utils import diarize_and_transcribe, load_transcript, make_provider, save_results, summarize_pipeline
 
 # =========================================================
 # CONFIGURATION
@@ -513,9 +515,6 @@ async def change_password(
 # API: TRANSCRIBE
 # =========================================================
 
-from tools import extract_records, generate_timeline, json_to_txt, load_transcript_vizualize  # noqa: E402
-from utils import diarize_and_transcribe, load_transcript, make_provider, save_results, summarize_pipeline  # noqa: E402
-
 
 @app.post("/api/v1/transcribe")
 async def transcribe_audio(
@@ -556,8 +555,8 @@ async def transcribe_audio(
         )
         os.remove(tmp_path)
 
-        json_name = f"{job_dir}/{safe_stem}.json"
-        txt_name = f"{job_dir}/{safe_stem}.txt"
+        json_name = _safe_join(job_dir, f"{safe_stem}.json")
+        txt_name = _safe_join(job_dir, f"{safe_stem}.txt")
 
         # Transcribe + diarize
         print(f"\n[INFO] Transcribing {safe_stem}...")

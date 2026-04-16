@@ -235,7 +235,9 @@ def consume_reset_token(token: str) -> str:
         conn.close()
         raise HTTPException(status_code=400, detail="Reset token has already been used.")
 
-    expiry_dt = datetime.datetime.fromisoformat(expires_at)
+    expiry_dt = datetime.datetime.fromisoformat(expires_at).replace(
+        tzinfo=datetime.timezone.utc
+    )
     if expiry_dt < datetime.datetime.now(datetime.timezone.utc):
         conn.close()
         raise HTTPException(status_code=400, detail="Reset token has expired.")
