@@ -90,6 +90,26 @@ export async function loginBasic(email, password) {
 }
 
 /**
+ * Log in by directly providing an API token.
+ * Intended for personal/self-hosted usage where token issuance is managed externally.
+ */
+export function loginWithApiToken(token, name = 'API User', email = '') {
+  const store = useAppStore()
+  const trimmedToken = (token || '').trim()
+  if (!trimmedToken) {
+    throw new Error('API token is required.')
+  }
+
+  store.state.token = trimmedToken
+  store.state.user = {
+    name: (name || '').trim() || 'API User',
+    email: (email || '').trim(),
+    picture: ''
+  }
+  store.state.authMethod = 'api'
+}
+
+/**
  * Register a new account with name, email and password.
  * If the backend returns a token the user is automatically logged in.
  */

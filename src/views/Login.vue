@@ -28,6 +28,13 @@
         >
           Email & Password
         </button>
+        <button
+          class="flex-1 py-2 text-sm font-semibold rounded-lg transition"
+          :class="tab === 'api' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+          @click="tab = 'api'"
+        >
+          API Token
+        </button>
       </div>
 
       <!-- Google tab -->
@@ -61,7 +68,7 @@
       </div>
 
       <!-- Email & Password tab -->
-      <div v-else>
+      <div v-if="tab === 'basic'">
         <form @submit.prevent="handleBasicLogin" class="space-y-4">
           <div class="space-y-1">
             <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">Email</label>
@@ -118,6 +125,56 @@
         </p>
       </div>
 
+      <!-- API Token tab -->
+      <div v-else class="space-y-4">
+        <div class="space-y-1">
+          <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">API Token</label>
+          <input
+            v-model="apiToken"
+            type="password"
+            required
+            placeholder="Paste your backend token"
+            class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+        </div>
+        <div class="space-y-1">
+          <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">
+            Display Name
+            <span class="text-slate-400 font-normal normal-case ml-1">(optional)</span>
+          </label>
+          <input
+            v-model="apiDisplayName"
+            type="text"
+            placeholder="API User"
+            class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+        </div>
+        <div class="space-y-1">
+          <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">
+            Email
+            <span class="text-slate-400 font-normal normal-case ml-1">(optional)</span>
+          </label>
+          <input
+            v-model="apiEmail"
+            type="email"
+            placeholder="you@example.com"
+            class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+        </div>
+        <button
+          type="button"
+          :disabled="loading"
+          @click="handleApiTokenLogin"
+          class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl transition text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          <svg v-if="loading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+          </svg>
+          {{ loading ? 'Signing in…' : 'Use API Token' }}
+        </button>
+      </div>
+
       <!-- Error message -->
       <div v-if="errorMsg" class="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3 mt-4">
         {{ errorMsg }}
@@ -135,7 +192,12 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '../stores/appStore'
-import { isCapacitorNative, signInWithGoogleNative, loginBasic } from '../services/authService'
+import {
+  isCapacitorNative,
+  signInWithGoogleNative,
+  loginBasic,
+  loginWithApiToken
+} from '../services/authService'
 
 const router = useRouter()
 const { state } = useAppStore()
@@ -145,6 +207,9 @@ const tab = ref('google')
 const email = ref('')
 const password = ref('')
 const showPassword = ref(false)
+const apiToken = ref('')
+const apiDisplayName = ref('')
+const apiEmail = ref('')
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
 const isNative = isCapacitorNative()
@@ -205,6 +270,22 @@ const handleBasicLogin = async () => {
   }
 }
 
+// ---------------------------------------------------------------------------
+// API token login
+// ---------------------------------------------------------------------------
+const handleApiTokenLogin = async () => {
+  loading.value = true
+  errorMsg.value = ''
+  try {
+    loginWithApiToken(apiToken.value, apiDisplayName.value, apiEmail.value)
+    router.push('/')
+  } catch (e) {
+    errorMsg.value = e.message || 'API token login failed.'
+  } finally {
+    loading.value = false
+  }
+}
+
 onMounted(() => {
   if (isNative) return  // native path — no GIS needed
 
@@ -232,4 +313,3 @@ onMounted(() => {
   initGoogle()
 })
 </script>
-
