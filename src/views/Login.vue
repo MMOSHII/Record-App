@@ -128,6 +128,18 @@
       <!-- API Token tab -->
       <div v-if="tab === 'api'" class="space-y-4">
         <div class="space-y-1">
+          <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">
+            Backend URL
+          </label>
+          <input
+            v-model="apiUrl"
+            type="url"
+            placeholder="http://localhost:8000"
+            class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+          <p class="text-xs text-slate-400">Base URL of your backend. Leave blank to use the Vite dev-server proxy.</p>
+        </div>
+        <div class="space-y-1">
           <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">API Token</label>
           <input
             v-model="apiToken"
@@ -210,6 +222,7 @@ const showPassword = ref(false)
 const apiToken = ref('')
 const apiDisplayName = ref('')
 const apiEmail = ref('')
+const apiUrl = ref(state.settings.apiUrl || '')
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
 const isNative = isCapacitorNative()
@@ -277,6 +290,7 @@ const handleApiTokenLogin = async () => {
   loading.value = true
   errorMsg.value = ''
   try {
+    state.settings.apiUrl = apiUrl.value.trim()
     loginWithApiToken(apiToken.value, apiDisplayName.value, apiEmail.value)
     router.push('/')
   } catch (e) {
