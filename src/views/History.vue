@@ -76,8 +76,8 @@
       >
         <!-- Job Header -->
         <div
-          @click="toggleJob(job.folder_name)"
-          @keydown.enter="toggleJob(job.folder_name)"
+          @click="openJobDetail(job.folder_name)"
+          @keydown.enter="openJobDetail(job.folder_name)"
           role="button"
           tabindex="0"
           class="w-full flex items-start justify-between p-5 text-left hover:bg-slate-50 transition cursor-pointer"
@@ -118,15 +118,7 @@
               </svg>
               {{ reRunning[job.folder_name] ? 'Running…' : 'Re-run' }}
             </button>
-            <svg
-              class="w-5 h-5 text-slate-400 flex-shrink-0 transition-transform"
-              :class="expandedJobs.has(job.folder_name) ? 'rotate-180' : ''"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-            </svg>
+            <span class="text-xs text-indigo-600 font-semibold">Open</span>
           </div>
         </div>
 
@@ -292,10 +284,12 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAppStore } from '../stores/appStore'
 import { getHistory, getJob, getDownloadUrl, summarizeJob, visualizeJob } from '../services/api.js'
 
 const store = useAppStore()
+const router = useRouter()
 
 const jobs = ref([])
 const loading = ref(false)
@@ -392,6 +386,11 @@ const loadHistory = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const openJobDetail = (folderName) => {
+  if (!folderName) return
+  router.push(`/history/${encodeURIComponent(folderName)}`)
 }
 
 const toggleJob = async (folderName) => {
