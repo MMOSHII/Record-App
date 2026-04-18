@@ -202,8 +202,10 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getJob, getDownloadUrl } from '../services/api'
+import { useAppStore } from '../stores/appStore'
 
 const route = useRoute()
+const store = useAppStore()
 
 // --- UI Toggle State ---
 const uiState = ref({
@@ -343,11 +345,69 @@ const initDashboard = () => {
   activeLanguages.value = availableLanguages.value
 }
 
+const resetDetailState = () => {
+  detail.value = {
+    transcript: '',
+    summary: ''
+  }
+  transcriptData.value = []
+  speakerSettings.value = {}
+  activeLanguages.value = []
+}
+
+const hasDetailContent = (payload) => {
+  if (!payload || typeof payload !== 'object') return false
+  return Boolean(payload.summary || payload.transcript || (Array.isArray(payload.transcriptData) && payload.transcriptData.length))
+}
+
+const getCachedDetail = (folder) => {
+  if (!folder) return null
+  const cache = store.state.historyDetailCache
+  if (!cache || typeof cache !== 'object') return null
+  const cached = cache[folder]
+  return hasDetailContent(cached) ? cached : null
+}
+
+const applyCachedDetail = (cached) => {
+  if (!hasDetailContent(cached)) return false
+  detail.value = {
+    summary: cached.summary || '',
+    transcript: cached.transcript || ''
+  }
+  const rawData = Array.isArray(cached.transcriptData) ? cached.transcriptData : []
+  transcriptData.value = rawData.map((item, index) => ({ ...item, _id: index }))
+  if (transcriptData.value.length) {
+    initDashboard()
+  } else {
+    speakerSettings.value = {}
+    activeLanguages.value = []
+  }
+  return true
+}
+
+const saveCachedDetail = () => {
+  if (!folderName.value) return
+  const payload = {
+    summary: detail.value.summary || '',
+    transcript: detail.value.transcript || '',
+    transcriptData: transcriptData.value.map(({ _id, ...rest }) => ({ ...rest })),
+    updatedAt: new Date().toISOString()
+  }
+  if (!hasDetailContent(payload)) return
+  store.state.historyDetailCache = {
+    ...(store.state.historyDetailCache || {}),
+    [folderName.value]: payload
+  }
+}
+
 // Fetch Logic
 const loadDetail = async () => {
   if (!folderName.value) return
   loading.value = true
   error.value = ''
+  resetDetailState()
+  const cached = getCachedDetail(folderName.value)
+  if (cached) applyCachedDetail(cached)
   
   try {
     const jobDetail = await getJob(folderName.value)
@@ -360,6 +420,8 @@ const loadDetail = async () => {
         const response = await fetch(summaryUrl)
         if (response.ok) detail.value.summary = await response.text()
       } catch (e) { console.error('Error fetching summary:', e) }
+    } else if (!cached?.summary) {
+      detail.value.summary = ''
     }
 
     // 2. Fetch INTERACTIVE JSON Transcript
@@ -370,10 +432,17 @@ const loadDetail = async () => {
         if (response.ok) {
           const rawData = await response.json()
           transcriptData.value = rawData.map((item, index) => ({ ...item, _id: index }))
-          initDashboard()
         }
       } catch (e) { console.error('Error fetching JSON transcript:', e) }
-    } 
+    } else if (!Array.isArray(cached?.transcriptData) || !cached.transcriptData.length) {
+      transcriptData.value = []
+    }
+    if (transcriptData.value.length) {
+      initDashboard()
+    } else {
+      speakerSettings.value = {}
+      activeLanguages.value = []
+    }
     
     // 3. ALWAYS Fetch RAW TXT Transcript
     if (files.transcript_txt) {
@@ -382,10 +451,17 @@ const loadDetail = async () => {
         const response = await fetch(transcriptUrl)
         if (response.ok) detail.value.transcript = await response.text()
       } catch (e) { console.error('Error fetching TXT transcript:', e) }
+    } else if (!cached?.transcript) {
+      detail.value.transcript = ''
     }
+    saveCachedDetail()
 
   } catch (err) {
-    error.value = err.message || 'Failed to load job detail.'
+    if (!applyCachedDetail(cached)) {
+      error.value = err.message || 'Failed to load job detail.'
+    } else {
+      error.value = 'Offline mode: showing saved job detail from this device.'
+    }
   } finally {
     loading.value = false
   }

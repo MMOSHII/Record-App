@@ -23,6 +23,7 @@ describe('appStore – initial state', () => {
     expect(state.token).toBe('')
     expect(state.user).toBeNull()
     expect(state.historyCache).toEqual([])
+    expect(state.historyDetailCache).toEqual({})
     expect(state.settings.provider).toBe('ollama')
     expect(state.settings.model).toBe('')
     expect(state.settings.apiKey).toBe('')
@@ -40,6 +41,13 @@ describe('appStore – initial state', () => {
       user: { name: 'Alice', email: 'alice@example.com', picture: '' },
       settings: { provider: 'openai', model: 'gpt-4o', apiKey: 'sk-123', apiUrl: 'https://api.example.com' },
       historyCache: [{ folder_name: 'job_1' }],
+      historyDetailCache: {
+        job_1: {
+          summary: 'cached summary',
+          transcript: 'cached transcript',
+          transcriptData: [{ speaker: 1, start: 0, end: 1, text: 'hello' }]
+        }
+      },
       pipeline: {
         currentStep: 3,
         status: 'idle',
@@ -57,6 +65,7 @@ describe('appStore – initial state', () => {
     expect(state.settings.apiKey).toBe('sk-123')
     expect(state.settings.apiUrl).toBe('https://api.example.com')
     expect(state.historyCache).toEqual([{ folder_name: 'job_1' }])
+    expect(state.historyDetailCache.job_1.summary).toBe('cached summary')
     expect(state.pipeline.currentStep).toBe(3)
     expect(state.pipeline.folderName).toBe('job_abc')
     expect(state.pipeline.results.transcription).toBe('Hello')
@@ -94,6 +103,7 @@ describe('appStore – logout()', () => {
     state.token = 'tok'
     state.user = { name: 'Bob', email: 'bob@example.com', picture: '' }
     state.historyCache = [{ folder_name: 'job_xyz' }]
+    state.historyDetailCache = { job_xyz: { summary: 'cached' } }
     state.pipeline.currentStep = 3
     state.pipeline.folderName = 'job_xyz'
     state.pipeline.status = 'done'
@@ -104,6 +114,7 @@ describe('appStore – logout()', () => {
     expect(state.token).toBe('')
     expect(state.user).toBeNull()
     expect(state.historyCache).toEqual([])
+    expect(state.historyDetailCache).toEqual({})
     expect(state.pipeline.currentStep).toBe(1)
     expect(state.pipeline.status).toBe('idle')
     expect(state.pipeline.folderName).toBe('')

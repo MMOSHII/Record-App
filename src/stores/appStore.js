@@ -15,6 +15,10 @@ const state = reactive({
   user: savedState.user || null,
   authMethod: savedState.authMethod || '',
   historyCache: Array.isArray(savedState.historyCache) ? savedState.historyCache : [],
+  historyDetailCache:
+    savedState.historyDetailCache && typeof savedState.historyDetailCache === 'object'
+      ? savedState.historyDetailCache
+      : {},
   settings: {
     provider: savedState.settings?.provider || 'ollama',
     model: savedState.settings?.model || '',
@@ -50,6 +54,7 @@ const logout = () => {
   state.user = null
   state.authMethod = ''
   state.historyCache = []
+  state.historyDetailCache = {}
   state.pipeline = {
     currentStep: 1,
     status: 'idle',
