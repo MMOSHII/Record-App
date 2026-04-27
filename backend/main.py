@@ -16,6 +16,7 @@ import os
 import time
 import json
 import hmac
+import uuid
 import shutil
 import traceback
 import contextlib
@@ -24,7 +25,11 @@ import ffmpeg
 from dotenv import load_dotenv
 from typing import Optional, Dict, Any, List, Literal
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header
+import urllib.request
+import urllib.error
+import hashlib
+
+from fastapi import BackgroundTasks, FastAPI, UploadFile, File, Form, HTTPException, Header
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, field_validator
@@ -38,6 +43,42 @@ load_dotenv()
 
 GOOGLE_CLIENT_ID: Optional[str] = os.getenv("GOOGLE_CLIENT_ID")
 BASE_DIR = "Data"
+SPEECH_BAND_LOW_HZ = 80
+SPEECH_BAND_HIGH_HZ = 7800
+NOISE_FLOOR_DB = -25
+
+# Chunked-upload constants
+_UPLOADS_SUBDIR = "_uploads"      # staging folder inside user data root
+_MAX_UPLOAD_CHUNKS = 10_000       # safety cap on number of chunks per session
+
+# ── Webhook ─────────────────────────────────────────────────────────────────
+# Optional HMAC secret for signing outbound webhook payloads.
+# Set WEBHOOK_SECRET in .env to enable the X-RecordNote-Signature header.
+_WEBHOOK_SECRET: Optional[str] = os.getenv("WEBHOOK_SECRET")
+
+# ── Processing-time estimate rates ──────────────────────────────────────────
+# Values are expressed as "compute seconds per audio-minute" unless otherwise
+# noted.  They represent conservative CPU-class baselines and can be tuned by
+# overriding the corresponding ESTIMATE_* environment variables.
+_ESTIMATE_RATES: Dict[str, float] = {
+    # Transcription (faster-whisper, CPU, incl. diarization)
+    "transcribe_sec_per_audio_min": float(os.getenv("ESTIMATE_TRANSCRIBE_RATE", "90")),
+    "transcribe_min_sec":           float(os.getenv("ESTIMATE_TRANSCRIBE_MIN",  "10")),
+    # Noise-reduction pass (ffmpeg afftdn – fast)
+    "denoise_sec_per_audio_min":    float(os.getenv("ESTIMATE_DENOISE_RATE",    "3")),
+    # Summarization – local (ollama) vs. cloud provider
+    "summarize_ollama_sec_per_audio_min": float(os.getenv("ESTIMATE_SUMMARIZE_OLLAMA_RATE", "30")),
+    "summarize_cloud_sec_per_audio_min":  float(os.getenv("ESTIMATE_SUMMARIZE_CLOUD_RATE",  "10")),
+    "summarize_min_sec":                  float(os.getenv("ESTIMATE_SUMMARIZE_MIN",          "5")),
+    # Visualization (matplotlib timeline – fast, mostly I/O-bound)
+    "visualize_fixed_sec":          float(os.getenv("ESTIMATE_VISUALIZE_FIXED", "5")),
+    "visualize_sec_per_audio_min":  float(os.getenv("ESTIMATE_VISUALIZE_RATE",  "1")),
+    # Translation (CTranslate2 NLLB)
+    "translate_sec_per_audio_min":  float(os.getenv("ESTIMATE_TRANSLATE_RATE",  "15")),
+    "translate_min_sec":            float(os.getenv("ESTIMATE_TRANSLATE_MIN",    "3")),
+}
+
+_CLOUD_PROVIDERS = {"openai", "anthropic", "groq", "google", "gemini"}
 
 # Files produced per job folder:
 #   <base>.wav
@@ -216,6 +257,52 @@ def _now_iso() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
+def _language_token(value: str) -> str:
+    """
+    Normalize language labels (name or code) to filesystem-safe lowercase tokens.
+    """
+    cleaned = "".join(c.lower() if c.isalnum() else "_" for c in value.strip())
+    token = "_".join(part for part in cleaned.split("_") if part)
+    if not token:
+        raise HTTPException(status_code=400, detail="Invalid language value.")
+    return token[:40]
+
+
+def _try_apply_noise_reduction(input_wav: str, output_wav: str) -> bool:
+    """
+    Apply lightweight speech-focused denoising before transcription.
+    input_wav: source WAV path.
+    output_wav: destination path for denoised WAV.
+    Filters:
+      - highpass at SPEECH_BAND_LOW_HZ
+      - lowpass at SPEECH_BAND_HIGH_HZ
+      - afftdn with NOISE_FLOOR_DB
+    Returns True on success and False when falling back to the original file.
+    """
+    try:
+        # Keep the speech band and reduce stationary noise
+        # efficiently for long files before the diarization/transcription step.
+        (
+            ffmpeg
+            .input(input_wav)
+            .output(
+                output_wav,
+                ac=1,
+                ar=16000,
+                af=(
+                    f"highpass=f={SPEECH_BAND_LOW_HZ},"
+                    f"lowpass=f={SPEECH_BAND_HIGH_HZ},"
+                    f"afftdn=nf={NOISE_FLOOR_DB}"
+                ),
+            )
+            .run(overwrite_output=True, quiet=True)
+        )
+        return True
+    except Exception:
+        traceback.print_exc()
+        return False
+
+
 # =========================================================
 # MANIFEST (job metadata) helpers
 # =========================================================
@@ -235,6 +322,115 @@ def _read_manifest(job_dir: str) -> Dict[str, Any]:
 def _write_manifest(job_dir: str, manifest: Dict[str, Any]) -> None:
     with open(_manifest_path(job_dir), "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+
+# =========================================================
+# CHUNKED-UPLOAD STATE HELPERS
+# =========================================================
+
+def _upload_dir(user_id: str, upload_id: str) -> str:
+    """Return the staging directory for a chunked upload session."""
+    safe_uid = _sanitize_name(upload_id, "upload_id")
+    return _safe_join(BASE_DIR, user_id, _UPLOADS_SUBDIR, safe_uid)
+
+
+def _read_upload_state(upload_directory: str) -> Dict[str, Any]:
+    p = os.path.join(upload_directory, "upload_state.json")
+    if not os.path.exists(p):
+        raise HTTPException(status_code=404, detail="Upload session not found.")
+    with open(p, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _write_upload_state(upload_directory: str, state: Dict[str, Any]) -> None:
+    with open(os.path.join(upload_directory, "upload_state.json"), "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+
+
+# =========================================================
+# PROCESSING-TIME ESTIMATE HELPERS
+# =========================================================
+
+def _format_duration(seconds: float) -> str:
+    """Return a human-readable duration string, e.g. '~2 min 30 sec'."""
+    seconds = max(0.0, seconds)
+    if seconds < 60:
+        return f"~{int(seconds)} sec"
+    minutes = int(seconds // 60)
+    secs = int(seconds % 60)
+    if secs == 0:
+        return f"~{minutes} min"
+    return f"~{minutes} min {secs} sec"
+
+
+def _estimate_step_seconds(
+    step: str,
+    audio_duration_min: float,
+    provider: str = "ollama",
+) -> float:
+    """
+    Return an estimated processing time in seconds for a single pipeline step.
+
+    Parameters
+    ----------
+    step : str
+        One of ``transcribe``, ``summarize``, ``visualize``, ``translate``.
+    audio_duration_min : float
+        Duration of the audio file in minutes.
+    provider : str
+        LLM provider name; affects the summarize estimate.
+    """
+    r = _ESTIMATE_RATES
+    if step == "transcribe":
+        raw = r["transcribe_sec_per_audio_min"] * audio_duration_min
+        raw += r["denoise_sec_per_audio_min"] * audio_duration_min
+        return max(r["transcribe_min_sec"], raw)
+    if step == "summarize":
+        rate_key = (
+            "summarize_cloud_sec_per_audio_min"
+            if provider.lower() in _CLOUD_PROVIDERS
+            else "summarize_ollama_sec_per_audio_min"
+        )
+        raw = r[rate_key] * audio_duration_min
+        return max(r["summarize_min_sec"], raw)
+    if step == "visualize":
+        return r["visualize_fixed_sec"] + r["visualize_sec_per_audio_min"] * audio_duration_min
+    if step == "translate":
+        raw = r["translate_sec_per_audio_min"] * audio_duration_min
+        return max(r["translate_min_sec"], raw)
+    return 0.0
+
+
+# =========================================================
+# WEBHOOK HELPER
+# =========================================================
+
+def _fire_webhook(url: str, payload: Dict[str, Any]) -> None:
+    """
+    POST *payload* as JSON to *url*.
+
+    This is a best-effort, fire-and-forget call.  Errors are logged to stdout
+    but never propagated to the caller.  When WEBHOOK_SECRET is set the
+    request includes an ``X-RecordNote-Signature: sha256=<hex>`` header so
+    consumers can verify authenticity.
+    """
+    try:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers: Dict[str, str] = {
+            "Content-Type": "application/json",
+            "User-Agent": "RecordNote-Webhook/1.0",
+        }
+        if _WEBHOOK_SECRET:
+            sig = hmac.new(
+                _WEBHOOK_SECRET.encode("utf-8"), body, hashlib.sha256
+            ).hexdigest()
+            headers["X-RecordNote-Signature"] = f"sha256={sig}"
+        req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=10):
+            pass
+    except Exception:
+        traceback.print_exc()
+        print(f"[WEBHOOK] WARNING: failed to deliver webhook to {url}", flush=True)
 
 
 def _escape_html(text: str) -> str:
@@ -304,6 +500,33 @@ class VisualizeRequest(BaseModel):
     file_name: str
 
 
+class TranslateRequest(BaseModel):
+    google_token: str
+    folder_name: str
+    file_name: str
+    source_language: str
+    target_language: str
+    # Optional CTranslate2 model override (HF repo id or local path).
+    # Defaults to facebook/nllb-200-distilled-600M when not specified.
+    ct2_model: Optional[str] = None
+    files: Optional[List[Literal["json", "txt", "summary_txt"]]] = None
+
+
+class ChunkedUploadInitRequest(BaseModel):
+    google_token: str
+    filename: str
+    total_chunks: int
+    file_size: Optional[int] = None
+    transcribe_lang: Optional[str] = None
+
+
+class ChunkedUploadCompleteRequest(BaseModel):
+    google_token: str
+    upload_id: str
+    transcribe_lang: Optional[str] = None
+    webhook_url: Optional[str] = None
+
+
 # ---- auth request models --------------------------------
 
 class RegisterRequest(BaseModel):
@@ -366,6 +589,93 @@ class ChangePasswordRequest(BaseModel):
 @app.get("/api/v1/health")
 async def health():
     return {"status": "ok"}
+
+
+# =========================================================
+# API: PROCESSING-TIME ESTIMATE
+# =========================================================
+
+_ALL_STEPS = ["transcribe", "summarize", "visualize", "translate"]
+
+
+@app.get("/api/v1/estimate")
+async def estimate_processing(
+    google_token: str,
+    audio_duration_seconds: float,
+    steps: str = "transcribe,summarize,visualize,translate",
+    provider: str = "ollama",
+):
+    """
+    Return estimated processing times for one or more pipeline steps.
+
+    Query parameters
+    ----------------
+    audio_duration_seconds : float
+        Duration of the audio file in seconds.
+    steps : str
+        Comma-separated list of steps to estimate.
+        Allowed values: ``transcribe``, ``summarize``, ``visualize``,
+        ``translate``.  Defaults to all four steps.
+    provider : str
+        LLM provider name used to tune the summarize estimate.
+        ``ollama`` and ``llama_cpp`` (default group) assume a local model; any
+        cloud provider name (``openai``, ``anthropic``, ``groq``, ``google``,
+        ``gemini``) uses the faster cloud rate.
+
+    Response
+    --------
+    A JSON object with per-step and total estimates:
+
+    .. code-block:: json
+
+        {
+          "audio_duration_seconds": 120.0,
+          "steps": {
+            "transcribe": { "estimate_seconds": 186.0, "estimate_human": "~3 min 6 sec" },
+            "summarize":  { "estimate_seconds": 65.0,  "estimate_human": "~1 min 5 sec" },
+            ...
+          },
+          "total_estimate_seconds": 261.0,
+          "total_estimate_human": "~4 min 21 sec"
+        }
+    """
+    _resolve_user(google_token)
+
+    if audio_duration_seconds <= 0:
+        raise HTTPException(status_code=400, detail="audio_duration_seconds must be positive.")
+
+    requested = [s.strip().lower() for s in steps.split(",") if s.strip()]
+    invalid = [s for s in requested if s not in _ALL_STEPS]
+    if invalid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown step(s): {invalid}. Allowed: {_ALL_STEPS}",
+        )
+    if not requested:
+        raise HTTPException(status_code=400, detail="steps must not be empty.")
+
+    audio_duration_min = audio_duration_seconds / 60.0
+    step_estimates: Dict[str, Any] = {}
+    total_seconds = 0.0
+
+    for step in requested:
+        est = _estimate_step_seconds(step, audio_duration_min, provider)
+        step_estimates[step] = {
+            "estimate_seconds": round(est, 1),
+            "estimate_human": _format_duration(est),
+        }
+        total_seconds += est
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "audio_duration_seconds": audio_duration_seconds,
+            "provider": provider,
+            "steps": step_estimates,
+            "total_estimate_seconds": round(total_seconds, 1),
+            "total_estimate_human": _format_duration(total_seconds),
+        },
+    )
 
 
 # =========================================================
@@ -497,18 +807,33 @@ async def change_password(
 # =========================================================
 
 from tools import json_to_txt, extract_records, generate_timeline, load_transcript_vizualize
-from utils import diarize_and_transcribe, load_transcript, make_provider, summarize_pipeline, save_results
+from utils import (
+    diarize_and_transcribe,
+    load_transcript,
+    make_provider,
+    summarize_pipeline,
+    save_results,
+    translate_json_transcript,
+    translate_plain_text_file,
+    get_translator,
+)
+from utils.translate import resolve_flores200
 
 
 @app.post("/api/v1/transcribe")
 async def transcribe_audio(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     google_token: str = Form(...),
     transcribe_lang: str = Form(None),
+    webhook_url: Optional[str] = Form(None),
 ):
     """
     Creates a new job folder: Data/<user_id>/<safe_name>_<timestamp>/
     Produces <base>.wav, <base>.json, <base>.txt and manifest.json.
+
+    If ``webhook_url`` is provided the server fires a POST request to that URL
+    once transcription is complete (see webhook payload documentation).
     """
     try:
         user_id = _resolve_user(google_token)
@@ -532,6 +857,7 @@ async def transcribe_audio(
             shutil.copyfileobj(file.file, f_out)
 
         # Convert to 16 kHz mono WAV
+        t_convert = time.monotonic()
         wav_name = f"{safe_stem}.wav"
         wav_path = _safe_join(job_dir, wav_name)
         ffmpeg.input(tmp_path).output(wav_path, ac=1, ar=16000).run(
@@ -539,13 +865,26 @@ async def transcribe_audio(
         )
         os.remove(tmp_path)
 
+        denoised_wav_name = f"{safe_stem}_denoised.wav"
+        denoised_wav_path = _safe_join(job_dir, denoised_wav_name)
+        noise_reduction_applied = _try_apply_noise_reduction(wav_path, denoised_wav_path)
+        audio_for_transcription = denoised_wav_path if noise_reduction_applied else wav_path
+        convert_seconds = round(time.monotonic() - t_convert, 2)
+
         json_name = _safe_join(job_dir, f"{safe_stem}.json")
         txt_name = _safe_join(job_dir, f"{safe_stem}.txt")
 
         # Transcribe + diarize
         print(f"\n[INFO] Transcribing {safe_stem}...")
-        diarize_and_transcribe(wav_path, json_name, lang=transcribe_lang)
+        t_transcribe = time.monotonic()
+        diarize_and_transcribe(audio_for_transcription, json_name, lang=transcribe_lang)
         json_to_txt(json_name, txt_name)
+        transcribe_seconds = round(time.monotonic() - t_transcribe, 2)
+
+        elapsed: Dict[str, float] = {
+            "convert_seconds": convert_seconds,
+            "transcribe_seconds": transcribe_seconds,
+        }
 
         manifest: Dict[str, Any] = {
             "folder_name": folder_name,
@@ -557,14 +896,34 @@ async def transcribe_audio(
                 "transcribe": "done",
                 "summarize": "pending",
                 "visualize": "pending",
+                "translate": "pending",
             },
             "files": {
                 "audio": wav_name,
+                "audio_denoised": denoised_wav_name if noise_reduction_applied else None,
                 "transcript_txt": os.path.basename(txt_name),
                 "transcript_json": os.path.basename(json_name),
             },
+            "audio_processing": {
+                "noise_reduction_applied": noise_reduction_applied,
+                "transcription_source": os.path.basename(audio_for_transcription),
+            },
+            "elapsed": elapsed,
         }
         _write_manifest(job_dir, manifest)
+
+        if webhook_url:
+            background_tasks.add_task(
+                _fire_webhook,
+                webhook_url,
+                {
+                    "event": "transcribe_complete",
+                    "folder_name": folder_name,
+                    "file_name": safe_stem,
+                    "elapsed": elapsed,
+                    "manifest": manifest,
+                },
+            )
 
         return JSONResponse(
             status_code=200,
@@ -572,6 +931,419 @@ async def transcribe_audio(
                 "message": "Transcription complete",
                 "folder_name": folder_name,
                 "file_name": safe_stem,
+                "elapsed": elapsed,
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =========================================================
+# API: CHUNKED UPLOAD – INIT
+# =========================================================
+
+@app.post("/api/v1/upload/init")
+async def upload_init(req: ChunkedUploadInitRequest):
+    """
+    Initialize a chunked upload session.
+
+    Returns an ``upload_id`` and the list of already-received chunks (always
+    empty for a new session).  The client should split the file into
+    ``total_chunks`` equal-sized pieces and upload each one via
+    ``POST /api/v1/upload/chunk``.  Use ``GET /api/v1/upload/status/{upload_id}``
+    to discover which chunks are still missing after an interruption.
+    """
+    try:
+        user_id = _resolve_user(req.google_token)
+
+        if req.total_chunks < 1 or req.total_chunks > _MAX_UPLOAD_CHUNKS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"total_chunks must be between 1 and {_MAX_UPLOAD_CHUNKS}.",
+            )
+
+        orig_filename = req.filename or "recording"
+        orig_suffix = _safe_file_suffix(orig_filename)
+        original_stem = os.path.splitext(orig_filename)[0]
+        safe_stem = (
+            "".join(c if c.isalnum() or c in "-_" else "_" for c in original_stem)
+            .strip("_")
+            or "recording"
+        )
+
+        upload_id = f"up_{uuid.uuid4().hex}"
+        upload_directory = _upload_dir(user_id, upload_id)
+        os.makedirs(upload_directory, exist_ok=True)
+
+        state: Dict[str, Any] = {
+            "upload_id": upload_id,
+            "user_id": user_id,
+            "original_filename": orig_filename,
+            "safe_stem": safe_stem,
+            "orig_suffix": orig_suffix,
+            "total_chunks": req.total_chunks,
+            "file_size": req.file_size,
+            "transcribe_lang": req.transcribe_lang,
+            "received_chunks": [],
+            "created_at": _now_iso(),
+        }
+        _write_upload_state(upload_directory, state)
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "upload_id": upload_id,
+                "total_chunks": req.total_chunks,
+                "received_chunks": [],
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =========================================================
+# API: CHUNKED UPLOAD – UPLOAD CHUNK
+# =========================================================
+
+@app.post("/api/v1/upload/chunk")
+async def upload_chunk(
+    file: UploadFile = File(...),
+    google_token: str = Form(...),
+    upload_id: str = Form(...),
+    chunk_index: int = Form(...),
+):
+    """
+    Upload a single chunk for an existing upload session.
+
+    Chunks are identified by their zero-based ``chunk_index``.  Re-uploading
+    the same ``chunk_index`` is idempotent and can be used to recover from a
+    failed or incomplete chunk transfer – the server will simply overwrite the
+    previously stored data and return the current progress.
+    """
+    try:
+        user_id = _resolve_user(google_token)
+        upload_directory = _upload_dir(user_id, upload_id)
+        state = _read_upload_state(upload_directory)
+
+        if state.get("user_id") != user_id:
+            raise HTTPException(status_code=403, detail="Access denied.")
+
+        total_chunks: int = state["total_chunks"]
+        if chunk_index < 0 or chunk_index >= total_chunks:
+            raise HTTPException(
+                status_code=400,
+                detail=f"chunk_index must be between 0 and {total_chunks - 1}.",
+            )
+
+        # Save the chunk; overwrite if already present (idempotent retry)
+        chunk_filename = f"chunk_{chunk_index:06d}.bin"
+        chunk_path = _safe_join(upload_directory, chunk_filename)
+        with open(chunk_path, "wb") as f_out:
+            shutil.copyfileobj(file.file, f_out)
+
+        # Update received_chunks list
+        received: List[int] = state["received_chunks"]
+        if chunk_index not in received:
+            received.append(chunk_index)
+            received.sort()
+            state["received_chunks"] = received
+            _write_upload_state(upload_directory, state)
+
+        all_received = len(received) == total_chunks
+        return JSONResponse(
+            status_code=200,
+            content={
+                "upload_id": upload_id,
+                "chunk_index": chunk_index,
+                "total_chunks": total_chunks,
+                "received_chunks": received,
+                "complete": all_received,
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =========================================================
+# API: CHUNKED UPLOAD – STATUS
+# =========================================================
+
+@app.get("/api/v1/upload/status/{upload_id}")
+async def upload_status(upload_id: str, google_token: str):
+    """
+    Return the current status of a chunked upload session.
+
+    Clients can call this endpoint after a network interruption to find out
+    which chunks still need to be (re-)sent before calling
+    ``POST /api/v1/upload/complete``.
+    """
+    try:
+        user_id = _resolve_user(google_token)
+        upload_directory = _upload_dir(user_id, upload_id)
+        state = _read_upload_state(upload_directory)
+
+        if state.get("user_id") != user_id:
+            raise HTTPException(status_code=403, detail="Access denied.")
+
+        total_chunks: int = state["total_chunks"]
+        received: List[int] = state["received_chunks"]
+        received_set = set(received)
+        missing = [i for i in range(total_chunks) if i not in received_set]
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "upload_id": upload_id,
+                "total_chunks": total_chunks,
+                "received_chunks": received,
+                "missing_chunks": missing,
+                "complete": len(missing) == 0,
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =========================================================
+# API: CHUNKED UPLOAD – COMPLETE (assemble + transcribe)
+# =========================================================
+
+@app.post("/api/v1/upload/complete")
+async def upload_complete(
+    req: ChunkedUploadCompleteRequest,
+    background_tasks: BackgroundTasks,
+):
+    """
+    Assemble all uploaded chunks and start transcription.
+
+    All chunks must have been uploaded before calling this endpoint.  On
+    success the upload staging directory is removed and the response is
+    identical to the regular ``POST /api/v1/transcribe`` response, containing
+    ``folder_name`` and ``file_name`` which can be used for subsequent
+    summarize / visualize / translate requests.
+
+    If ``webhook_url`` is set in the request body, a POST notification is sent
+    to that URL once transcription is complete.
+    """
+    try:
+        user_id = _resolve_user(req.google_token)
+        upload_directory = _upload_dir(user_id, req.upload_id)
+        state = _read_upload_state(upload_directory)
+
+        if state.get("user_id") != user_id:
+            raise HTTPException(status_code=403, detail="Access denied.")
+
+        total_chunks: int = state["total_chunks"]
+        received: List[int] = state["received_chunks"]
+        if len(received) != total_chunks:
+            received_set = set(received)
+            missing = [i for i in range(total_chunks) if i not in received_set]
+            raise HTTPException(
+                status_code=400,
+                detail=f"Upload incomplete. Missing chunks: {missing}",
+            )
+
+        safe_stem: str = state["safe_stem"]
+        orig_suffix: str = state["orig_suffix"]
+        transcribe_lang: Optional[str] = req.transcribe_lang or state.get("transcribe_lang")
+
+        folder_name = f"{safe_stem}_{int(time.time())}"
+        job_dir = _safe_join(BASE_DIR, user_id, folder_name)
+        os.makedirs(job_dir, exist_ok=True)
+
+        # Assemble ordered chunks into a single temporary file
+        t_assemble = time.monotonic()
+        tmp_path = _safe_join(job_dir, f"_upload{orig_suffix}")
+        with open(tmp_path, "wb") as out_f:
+            for idx in range(total_chunks):
+                chunk_path = _safe_join(upload_directory, f"chunk_{idx:06d}.bin")
+                if not os.path.exists(chunk_path):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Chunk file missing for index {idx}.",
+                    )
+                with open(chunk_path, "rb") as in_f:
+                    shutil.copyfileobj(in_f, out_f)
+
+        # Clean up the staging directory now that chunks are assembled
+        shutil.rmtree(upload_directory, ignore_errors=True)
+        assemble_seconds = round(time.monotonic() - t_assemble, 2)
+
+        # Convert to 16 kHz mono WAV
+        t_convert = time.monotonic()
+        wav_name = f"{safe_stem}.wav"
+        wav_path = _safe_join(job_dir, wav_name)
+        ffmpeg.input(tmp_path).output(wav_path, ac=1, ar=16000).run(
+            overwrite_output=True, quiet=True
+        )
+        os.remove(tmp_path)
+
+        denoised_wav_name = f"{safe_stem}_denoised.wav"
+        denoised_wav_path = _safe_join(job_dir, denoised_wav_name)
+        noise_reduction_applied = _try_apply_noise_reduction(wav_path, denoised_wav_path)
+        audio_for_transcription = denoised_wav_path if noise_reduction_applied else wav_path
+        convert_seconds = round(time.monotonic() - t_convert, 2)
+
+        json_name = _safe_join(job_dir, f"{safe_stem}.json")
+        txt_name = _safe_join(job_dir, f"{safe_stem}.txt")
+
+        print(f"\n[INFO] Transcribing {safe_stem} (chunked upload)...")
+        t_transcribe = time.monotonic()
+        diarize_and_transcribe(audio_for_transcription, json_name, lang=transcribe_lang)
+        json_to_txt(json_name, txt_name)
+        transcribe_seconds = round(time.monotonic() - t_transcribe, 2)
+
+        elapsed: Dict[str, float] = {
+            "assemble_seconds": assemble_seconds,
+            "convert_seconds": convert_seconds,
+            "transcribe_seconds": transcribe_seconds,
+        }
+
+        manifest: Dict[str, Any] = {
+            "folder_name": folder_name,
+            "file_name": safe_stem,
+            "user_id": user_id,
+            "created_at": _now_iso(),
+            "updated_at": _now_iso(),
+            "status": {
+                "transcribe": "done",
+                "summarize": "pending",
+                "visualize": "pending",
+                "translate": "pending",
+            },
+            "files": {
+                "audio": wav_name,
+                "audio_denoised": denoised_wav_name if noise_reduction_applied else None,
+                "transcript_txt": os.path.basename(txt_name),
+                "transcript_json": os.path.basename(json_name),
+            },
+            "audio_processing": {
+                "noise_reduction_applied": noise_reduction_applied,
+                "transcription_source": os.path.basename(audio_for_transcription),
+            },
+            "elapsed": elapsed,
+        }
+        _write_manifest(job_dir, manifest)
+
+        if req.webhook_url:
+            background_tasks.add_task(
+                _fire_webhook,
+                req.webhook_url,
+                {
+                    "event": "transcribe_complete",
+                    "folder_name": folder_name,
+                    "file_name": safe_stem,
+                    "elapsed": elapsed,
+                    "manifest": manifest,
+                },
+            )
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Transcription complete",
+                "folder_name": folder_name,
+                "file_name": safe_stem,
+                "elapsed": elapsed,
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+@app.post("/api/v1/translate")
+async def translate_outputs(req: TranslateRequest):
+    """
+    Translate generated artifacts and save translated files as separate outputs.
+    Supports: .json, .txt, and _final_summary.txt.
+    """
+    try:
+        user_id = _resolve_user(req.google_token)
+        folder_name = _sanitize_name(req.folder_name, "folder_name")
+        file_name = _sanitize_name(req.file_name, "file_name")
+        source_language = req.source_language.strip()
+        target_language = req.target_language.strip()
+        if not source_language or not target_language:
+            raise HTTPException(status_code=400, detail="source_language and target_language are required.")
+        # Resolve to FLORES-200 codes early so that equivalent labels like
+        # "en" and "English" are correctly detected as the same language.
+        try:
+            src_flores = resolve_flores200(source_language)
+            tgt_flores = resolve_flores200(target_language)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        if src_flores == tgt_flores:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Source and target languages cannot be the same (both resolved to '{src_flores}').",
+            )
+        source_token = _language_token(source_language)
+        target_token = _language_token(target_language)
+
+        job_dir = _safe_join(BASE_DIR, user_id, folder_name)
+        manifest = _read_manifest(job_dir)
+        translator = get_translator(req.ct2_model)
+
+        selected = req.files or ["json", "txt", "summary_txt"]
+        translated_files: Dict[str, str] = {}
+        lang_pair = f"{source_token}_to_{target_token}"
+
+        if "json" in selected:
+            src_json = _safe_join(job_dir, f"{file_name}.json")
+            if not os.path.exists(src_json):
+                raise HTTPException(status_code=404, detail="JSON transcript not found.")
+            dst_json_name = f"{file_name}_{lang_pair}.json"
+            dst_json = _safe_join(job_dir, dst_json_name)
+            translate_json_transcript(src_json, dst_json, translator, source_language, target_language)
+            translated_files["transcript_json"] = dst_json_name
+
+        if "txt" in selected:
+            src_txt = _safe_join(job_dir, f"{file_name}.txt")
+            if not os.path.exists(src_txt):
+                raise HTTPException(status_code=404, detail="TXT transcript not found.")
+            dst_txt_name = f"{file_name}_{lang_pair}.txt"
+            dst_txt = _safe_join(job_dir, dst_txt_name)
+            translate_plain_text_file(src_txt, dst_txt, translator, source_language, target_language)
+            translated_files["transcript_txt"] = dst_txt_name
+
+        if "summary_txt" in selected:
+            src_summary = _safe_join(job_dir, f"{file_name}_final_summary.txt")
+            if not os.path.exists(src_summary):
+                raise HTTPException(status_code=404, detail="Final summary TXT not found.")
+            dst_summary_name = f"{file_name}_final_summary_{lang_pair}.txt"
+            dst_summary = _safe_join(job_dir, dst_summary_name)
+            translate_plain_text_file(src_summary, dst_summary, translator, source_language, target_language)
+            translated_files["summary_txt"] = dst_summary_name
+
+        if "translations" not in manifest:
+            manifest["translations"] = {}
+        manifest["translations"][lang_pair] = translated_files
+        manifest["status"]["translate"] = "done"
+        manifest["updated_at"] = _now_iso()
+        _write_manifest(job_dir, manifest)
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Translation complete",
+                "folder_name": folder_name,
+                "file_name": file_name,
+                "source_language": source_language,
+                "target_language": target_language,
+                "files": translated_files,
             },
         )
     except HTTPException:
