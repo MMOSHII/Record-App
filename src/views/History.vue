@@ -14,6 +14,16 @@
           {{ loading ? 'Loading…' : 'Refresh' }}
         </button>
       </div>
+
+      <!-- Search / filter -->
+      <div class="mt-4">
+        <input
+          v-model="searchQuery"
+          type="search"
+          placeholder="Search by job name…"
+          class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50"
+        />
+      </div>
     </div>
 
     <div
@@ -35,12 +45,15 @@
     </div>
 
     <div
-      v-else-if="!loading && !jobs.length && !error"
+      v-else-if="!loading && !filteredJobs.length && !error"
       class="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center"
     >
-      <h3 class="text-base font-bold text-slate-700">No jobs yet</h3>
-      <p class="text-sm text-slate-400 mt-1">Process your first audio file on the Home page.</p>
+      <h3 class="text-base font-bold text-slate-700">{{ searchQuery ? 'No matching jobs' : 'No jobs yet' }}</h3>
+      <p class="text-sm text-slate-400 mt-1">
+        {{ searchQuery ? 'Try a different search term.' : 'Process your first audio file on the Home page.' }}
+      </p>
       <router-link
+        v-if="!searchQuery"
         to="/"
         class="inline-block mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm px-4 py-2 rounded-xl transition"
       >
@@ -50,7 +63,7 @@
 
     <div v-else class="space-y-4">
       <div
-        v-for="job in jobs"
+        v-for="job in filteredJobs"
         :key="job.folder_name"
         class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
       >
@@ -89,7 +102,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getHistory, summarizeJob, visualizeJob } from '../services/api.js'
 import { useAppStore } from '../stores/appStore'
@@ -101,6 +114,16 @@ const jobs = ref(Array.isArray(store.state.historyCache) ? [...store.state.histo
 const loading = ref(false)
 const error = ref('')
 const reRunning = reactive({})
+const searchQuery = ref('')
+
+const filteredJobs = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return jobs.value
+  return jobs.value.filter(job =>
+    String(job.folder_name || '').toLowerCase().includes(q) ||
+    String(job.file_name || '').toLowerCase().includes(q)
+  )
+})
 
 const statusClass = (status) => {
   const map = {

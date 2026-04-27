@@ -212,6 +212,20 @@
           Start Pipeline
         </span>
       </button>
+
+      <!-- Chunked upload progress bar (large files only) -->
+      <div v-if="chunkUploadStep" class="mt-4 space-y-1.5">
+        <div class="flex items-center justify-between text-xs font-semibold text-slate-600">
+          <span>{{ chunkUploadStep === 'assembling' ? 'Assembling &amp; transcribing…' : 'Uploading chunks…' }}</span>
+          <span class="font-mono tabular-nums">{{ chunkUploadProgress }}%</span>
+        </div>
+        <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+          <div
+            class="bg-indigo-500 h-2 rounded-full transition-all duration-300"
+            :style="{ width: chunkUploadProgress + '%' }"
+          />
+        </div>
+      </div>
     </div>
 
     <!-- Resume Section (Steps 2-3) -->
@@ -433,6 +447,13 @@ const fileInputRef = ref(null)
 const selectedFile = ref(null)
 const dragOver = ref(false)
 
+// Chunked upload state
+const chunkUploadProgress = ref(0)
+const chunkUploadStep = ref('') // 'uploading' | 'assembling' | ''
+
+const PARALLEL_CHUNKS = 3
+const MAX_CHUNK_RETRIES = 3
+
 // Record mode state
 const inputMode = ref('upload') // 'upload' | 'record'
 const isRecording = ref(false)
@@ -653,8 +674,10 @@ const startPipeline = async () => {
   pipeline.lastError = ''
 
   try {
-    // Step 1: Upload + Transcribe
-    const transcribeResult = await api.uploadAndTranscribe(fileToUpload)
+    // Step 1: Upload + Transcribe (chunked for large files)
+    const transcribeResult = fileToUpload.size > api.LARGE_FILE_THRESHOLD
+      ? await uploadLargeFile(fileToUpload)
+      : await api.uploadAndTranscribe(fileToUpload)
     pipeline.folderName = transcribeResult.folder_name || transcribeResult.folderName || ''
     pipeline.fileName =
       transcribeResult.file_name ||
@@ -669,11 +692,63 @@ const startPipeline = async () => {
   } catch (err) {
     pipeline.status = 'error'
     pipeline.lastError = err.message
+    chunkUploadStep.value = ''
     return
   }
 
   // Automatically continue to summarize
   await runSummarize()
+}
+
+/**
+ * Upload a file using the resumable chunked-upload API.
+ * Splits the file into CHUNK_SIZE pieces, uploads them in parallel batches,
+ * retries failed chunks, then calls /upload/complete to assemble + transcribe.
+ */
+const uploadLargeFile = async (file) => {
+  const totalChunks = Math.ceil(file.size / api.CHUNK_SIZE)
+  chunkUploadProgress.value = 0
+  chunkUploadStep.value = 'uploading'
+
+  // Init session
+  const { upload_id } = await api.initChunkedUpload(file.name, totalChunks, file.size)
+
+  // Resume: find out which chunks the server already has
+  const { received_chunks: alreadyReceived } = await api.getUploadStatus(upload_id)
+  const receivedSet = new Set(alreadyReceived)
+  const pending = Array.from({ length: totalChunks }, (_, i) => i).filter(i => !receivedSet.has(i))
+
+  let uploaded = alreadyReceived.length
+
+  // Upload pending chunks in parallel batches
+  for (let i = 0; i < pending.length; i += PARALLEL_CHUNKS) {
+    const batch = pending.slice(i, i + PARALLEL_CHUNKS)
+    await Promise.all(batch.map(async (chunkIndex) => {
+      const start = chunkIndex * api.CHUNK_SIZE
+      const end = Math.min(start + api.CHUNK_SIZE, file.size)
+      const blob = file.slice(start, end)
+      let lastErr
+      for (let attempt = 0; attempt < MAX_CHUNK_RETRIES; attempt++) {
+        try {
+          await api.uploadChunk(upload_id, chunkIndex, blob)
+          uploaded++
+          chunkUploadProgress.value = Math.round((uploaded / totalChunks) * 90)
+          return
+        } catch (err) {
+          lastErr = err
+        }
+      }
+      throw lastErr
+    }))
+  }
+
+  // Assemble + transcribe
+  chunkUploadStep.value = 'assembling'
+  chunkUploadProgress.value = 95
+  const result = await api.completeChunkedUpload(upload_id)
+  chunkUploadProgress.value = 100
+  chunkUploadStep.value = ''
+  return result
 }
 
 const runSummarize = async () => {

@@ -194,25 +194,185 @@
           <audio controls class="w-full rounded-lg" :src="downloadUrl('audio')" />
         </div>
       </div>
+
+      <!-- Visualization Image -->
+      <div v-if="manifest && manifest.files && manifest.files.timeline_png" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mt-6">
+        <div @click="toggleSection('visualization')" class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-100 transition">
+          <div class="flex items-center gap-2">
+            <svg :class="{'rotate-180': uiState.visualization}" class="w-5 h-5 text-slate-500 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Speaker Timeline</h2>
+          </div>
+          <a @click.stop :href="downloadUrl('image')" download class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition">Download PNG</a>
+        </div>
+        <div v-show="uiState.visualization" class="p-6 bg-white">
+          <img
+            :src="downloadUrl('image')"
+            class="w-full rounded-xl border border-slate-200"
+            alt="Speaker timeline visualization"
+            @error="$event.target.style.display = 'none'"
+          />
+        </div>
+      </div>
+
+      <!-- Job Actions: Summarize / Visualize / Translate -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mt-6">
+        <div @click="toggleSection('actions')" class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-100 transition">
+          <div class="flex items-center gap-2">
+            <svg :class="{'rotate-180': uiState.actions}" class="w-5 h-5 text-slate-500 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Actions</h2>
+          </div>
+        </div>
+        <div v-show="uiState.actions" class="p-6 space-y-6">
+
+          <!-- Summarize / Visualize re-run -->
+          <div v-if="canSummarize || canVisualize" class="flex flex-wrap gap-3">
+            <button
+              v-if="canSummarize"
+              @click="runSummarizeDetail"
+              :disabled="actionLoading.summarize"
+              class="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-xl transition"
+            >
+              <svg v-if="actionLoading.summarize" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              {{ actionLoading.summarize ? 'Summarizing…' : 'Run Summarize' }}
+            </button>
+            <button
+              v-if="canVisualize"
+              @click="runVisualizeDetail"
+              :disabled="actionLoading.visualize"
+              class="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-xl transition"
+            >
+              <svg v-if="actionLoading.visualize" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
+              {{ actionLoading.visualize ? 'Visualizing…' : 'Run Visualize' }}
+            </button>
+          </div>
+
+          <!-- Action error/success -->
+          <div v-if="actionError" class="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700 font-semibold">{{ actionError }}</div>
+          <div v-if="actionSuccess" class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-700 font-semibold">{{ actionSuccess }}</div>
+
+          <!-- Translation -->
+          <div class="space-y-4 pt-4 border-t border-slate-100">
+            <h3 class="text-sm font-bold text-slate-800">Translate Outputs</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div class="space-y-1">
+                <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">Source Language</label>
+                <input
+                  v-model="translateForm.sourceLang"
+                  type="text"
+                  placeholder="e.g. Indonesian"
+                  class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div class="space-y-1">
+                <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">Target Language</label>
+                <select
+                  v-model="translateForm.targetLang"
+                  class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="">Select language…</option>
+                  <option v-for="lang in TRANSLATE_LANGUAGES" :key="lang.code" :value="lang.code">{{ lang.label }}</option>
+                </select>
+              </div>
+            </div>
+            <div class="space-y-1">
+              <span class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">Files to Translate</span>
+              <div class="flex flex-wrap gap-3 mt-1">
+                <label v-for="opt in TRANSLATE_FILE_OPTIONS" :key="opt.value" class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    :value="opt.value"
+                    v-model="translateForm.files"
+                    class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                  />
+                  {{ opt.label }}
+                </label>
+              </div>
+            </div>
+            <div v-if="translateError" class="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700 font-semibold">{{ translateError }}</div>
+            <div v-if="translateSuccess" class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-700 font-semibold">{{ translateSuccess }}</div>
+            <button
+              @click="runTranslateDetail"
+              :disabled="translateLoading || !translateForm.targetLang || !translateForm.sourceLang || !translateForm.files.length"
+              class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-xl transition"
+            >
+              <svg v-if="translateLoading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/></svg>
+              {{ translateLoading ? 'Translating…' : 'Translate' }}
+            </button>
+          </div>
+
+          <!-- Job Metadata -->
+          <div v-if="manifest" class="pt-4 border-t border-slate-100 space-y-3">
+            <h3 class="text-sm font-bold text-slate-800">Job Metadata</h3>
+            <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+              <template v-if="manifest.status">
+                <dt class="text-slate-500 font-semibold uppercase tracking-wide">Transcribe</dt>
+                <dd><span class="px-2 py-0.5 rounded-md font-bold" :class="statusClass(manifest.status.transcribe)">{{ String(manifest.status.transcribe || '—').toUpperCase() }}</span></dd>
+                <dt class="text-slate-500 font-semibold uppercase tracking-wide">Summarize</dt>
+                <dd><span class="px-2 py-0.5 rounded-md font-bold" :class="statusClass(manifest.status.summarize)">{{ String(manifest.status.summarize || '—').toUpperCase() }}</span></dd>
+                <dt class="text-slate-500 font-semibold uppercase tracking-wide">Visualize</dt>
+                <dd><span class="px-2 py-0.5 rounded-md font-bold" :class="statusClass(manifest.status.visualize)">{{ String(manifest.status.visualize || '—').toUpperCase() }}</span></dd>
+                <dt class="text-slate-500 font-semibold uppercase tracking-wide">Translate</dt>
+                <dd><span class="px-2 py-0.5 rounded-md font-bold" :class="statusClass(manifest.status.translate)">{{ String(manifest.status.translate || '—').toUpperCase() }}</span></dd>
+              </template>
+              <template v-if="manifest.provider">
+                <dt class="text-slate-500 font-semibold uppercase tracking-wide">Provider</dt>
+                <dd class="text-slate-700 font-mono">{{ manifest.provider }}</dd>
+              </template>
+              <template v-if="manifest.created_at">
+                <dt class="text-slate-500 font-semibold uppercase tracking-wide">Created</dt>
+                <dd class="text-slate-700">{{ formatDate(manifest.created_at) }}</dd>
+              </template>
+              <template v-if="manifest.updated_at">
+                <dt class="text-slate-500 font-semibold uppercase tracking-wide">Updated</dt>
+                <dd class="text-slate-700">{{ formatDate(manifest.updated_at) }}</dd>
+              </template>
+            </dl>
+          </div>
+        </div>
+      </div>
     </template>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { getJob, getDownloadUrl } from '../services/api'
+import { getJob, getDownloadUrl, summarizeJob, visualizeJob, translateJob } from '../services/api'
 import { useAppStore } from '../stores/appStore'
 
 const route = useRoute()
 const store = useAppStore()
+
+const TRANSLATE_LANGUAGES = [
+  { code: 'English', label: 'English' },
+  { code: 'Indonesian', label: 'Indonesian' },
+  { code: 'Spanish', label: 'Spanish' },
+  { code: 'French', label: 'French' },
+  { code: 'German', label: 'German' },
+  { code: 'Arabic', label: 'Arabic' },
+  { code: 'Japanese', label: 'Japanese' },
+  { code: 'Chinese', label: 'Chinese (Simplified)' },
+  { code: 'Korean', label: 'Korean' },
+  { code: 'Portuguese', label: 'Portuguese' }
+]
+
+const TRANSLATE_FILE_OPTIONS = [
+  { value: 'json', label: 'Transcript JSON' },
+  { value: 'txt', label: 'Transcript TXT' },
+  { value: 'summary_txt', label: 'Summary TXT' }
+]
 
 // --- UI Toggle State ---
 const uiState = ref({
   summary: true,
   editor: true,
   raw: true,
-  audio: true
+  audio: true,
+  visualization: true,
+  actions: true
 })
 
 const toggleSection = (sectionName) => {
@@ -222,11 +382,58 @@ const toggleSection = (sectionName) => {
 // --- Core API Data ---
 const loading = ref(false)
 const error = ref('')
+const manifest = ref(null)
 const detail = ref({
   transcript: '',
   summary: ''
 })
 const folderName = computed(() => String(route.params.folderName || ''))
+const fileName = computed(() => manifest.value?.file_name || '')
+
+// --- Action state ---
+const actionLoading = reactive({ summarize: false, visualize: false })
+const actionError = ref('')
+const actionSuccess = ref('')
+
+// --- Translate state ---
+const translateLoading = ref(false)
+const translateError = ref('')
+const translateSuccess = ref('')
+const translateForm = reactive({
+  sourceLang: '',
+  targetLang: '',
+  files: ['json', 'txt', 'summary_txt']
+})
+
+// --- Status helpers ---
+const statusClass = (status) => {
+  const map = {
+    done: 'bg-emerald-100 text-emerald-700',
+    completed: 'bg-emerald-100 text-emerald-700',
+    error: 'bg-red-100 text-red-700',
+    failed: 'bg-red-100 text-red-700',
+    running: 'bg-indigo-100 text-indigo-700',
+    processing: 'bg-indigo-100 text-indigo-700',
+    pending: 'bg-amber-100 text-amber-700'
+  }
+  return map[String(status || '').toLowerCase()] || 'bg-slate-100 text-slate-600'
+}
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return ''
+  try {
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(dateStr))
+  } catch {
+    return dateStr
+  }
+}
+
+const canSummarize = computed(() =>
+  manifest.value && String(manifest.value.status?.summarize || '').toLowerCase() !== 'done'
+)
+const canVisualize = computed(() =>
+  manifest.value && String(manifest.value.status?.visualize || '').toLowerCase() !== 'done'
+)
 
 // --- Diarization Interactive Data ---
 const transcriptData = ref([])
@@ -411,6 +618,7 @@ const loadDetail = async () => {
   
   try {
     const jobDetail = await getJob(folderName.value)
+    manifest.value = jobDetail
     const files = jobDetail?.files || {}
     
     // 1. Fetch Summary
@@ -464,6 +672,70 @@ const loadDetail = async () => {
     }
   } finally {
     loading.value = false
+  }
+}
+
+const runSummarizeDetail = async () => {
+  if (!fileName.value) {
+    actionError.value = 'Job file name is not available. Please reload the page.'
+    return
+  }
+  actionLoading.summarize = true
+  actionError.value = ''
+  actionSuccess.value = ''
+  try {
+    await summarizeJob(folderName.value, fileName.value)
+    actionSuccess.value = 'Summarization complete. Reloading…'
+    await loadDetail()
+  } catch (err) {
+    actionError.value = err.message
+  } finally {
+    actionLoading.summarize = false
+  }
+}
+
+const runVisualizeDetail = async () => {
+  if (!fileName.value) {
+    actionError.value = 'Job file name is not available. Please reload the page.'
+    return
+  }
+  actionLoading.visualize = true
+  actionError.value = ''
+  actionSuccess.value = ''
+  try {
+    await visualizeJob(folderName.value, fileName.value)
+    actionSuccess.value = 'Visualization complete. Reloading…'
+    await loadDetail()
+  } catch (err) {
+    actionError.value = err.message
+  } finally {
+    actionLoading.visualize = false
+  }
+}
+
+const runTranslateDetail = async () => {
+  if (!fileName.value || !translateForm.sourceLang || !translateForm.targetLang || !translateForm.files.length) {
+    translateError.value = 'Please fill in all required fields before translating.'
+    return
+  }
+  translateLoading.value = true
+  translateError.value = ''
+  translateSuccess.value = ''
+  try {
+    const result = await translateJob(
+      folderName.value,
+      fileName.value,
+      translateForm.sourceLang,
+      translateForm.targetLang,
+      translateForm.files
+    )
+    const fileCount = Object.keys(result.files || {}).length
+    translateSuccess.value = `Translation to ${result.target_language} complete — ${fileCount} file(s) generated.`
+    await loadDetail()
+  } catch (err) {
+    translateError.value = err.message
+  } finally {
+    translateLoading.value = false
   }
 }
 
