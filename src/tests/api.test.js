@@ -287,6 +287,36 @@ describe('completeChunkedUpload', () => {
   })
 })
 
+describe('deleteJobs', () => {
+  it('POSTs to /api/v1/history/delete with correct JSON body', async () => {
+    const result = { deleted: ['job_1', 'job_2'], not_found: [] }
+    global.fetch = vi.fn().mockResolvedValue(makeResponse(result))
+
+    const data = await api.deleteJobs(['job_1', 'job_2'])
+
+    expect(global.fetch).toHaveBeenCalledOnce()
+    const [url, opts] = global.fetch.mock.calls[0]
+    expect(url).toBe('https://api.example.com/api/v1/history/delete')
+    expect(opts.method).toBe('POST')
+    const body = JSON.parse(opts.body)
+    expect(body.google_token).toBe('test-token')
+    expect(body.folder_names).toEqual(['job_1', 'job_2'])
+    expect(data).toEqual(result)
+  })
+
+  it('sends a single folder name correctly', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse({ deleted: ['job_1'], not_found: [] }))
+    await api.deleteJobs(['job_1'])
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body)
+    expect(body.folder_names).toEqual(['job_1'])
+  })
+
+  it('throws an error on non-ok response', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse('Forbidden', false, 403))
+    await expect(api.deleteJobs(['job_1'])).rejects.toThrow('Delete failed (403)')
+  })
+})
+
 describe('retranscribeJob', () => {
   it('POSTs to /api/v1/retranscribe with correct JSON body', async () => {
     const result = { message: 'Re-transcription complete', folder_name: 'job_1', file_name: 'audio', transcript: 'Hello world' }

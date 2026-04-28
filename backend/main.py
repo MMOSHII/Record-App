@@ -519,6 +519,11 @@ class RetranscribeRequest(BaseModel):
     transcribe_lang: Optional[str] = None
 
 
+class DeleteJobsRequest(BaseModel):
+    google_token: str
+    folder_names: List[str]
+
+
 class ChunkedUploadInitRequest(BaseModel):
     google_token: str
     filename: str
@@ -1034,6 +1039,54 @@ async def retranscribe_audio(req: RetranscribeRequest):
                 "file_name": file_name,
                 "transcript": transcript_text,
                 "elapsed": {"transcribe_seconds": elapsed_sec},
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =========================================================
+# API: DELETE HISTORY JOBS
+# =========================================================
+
+@app.post("/api/v1/history/delete")
+async def delete_jobs(req: DeleteJobsRequest):
+    """
+    Permanently delete one or more job folders belonging to the authenticated
+    user.  Each entry in ``folder_names`` must be a valid job folder that
+    exists under the user's data directory.
+
+    Returns a summary of deleted and not-found folders so the client can
+    update its list accordingly.
+    """
+    try:
+        user_id = _resolve_user(req.google_token)
+
+        if not req.folder_names:
+            raise HTTPException(status_code=400, detail="folder_names must not be empty.")
+
+        deleted = []
+        not_found = []
+
+        for raw_name in req.folder_names:
+            folder_name = _sanitize_name(raw_name, "folder_name")
+            job_dir = _safe_join(BASE_DIR, user_id, folder_name)
+
+            if not os.path.isdir(job_dir):
+                not_found.append(folder_name)
+                continue
+
+            shutil.rmtree(job_dir)
+            deleted.append(folder_name)
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "deleted": deleted,
+                "not_found": not_found,
             },
         )
     except HTTPException:

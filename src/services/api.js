@@ -243,6 +243,30 @@ export async function retranscribeJob(folderName, fileName, transcribeLang) {
 }
 
 /**
+ * Permanently delete one or more job folders.
+ * POST /api/v1/history/delete
+ * @param {string[]} folderNames - list of folder names to delete
+ */
+export async function deleteJobs(folderNames) {
+  const url = `${store.getBaseUrl()}/api/v1/history/delete`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      google_token: store.state.token,
+      folder_names: folderNames
+    })
+  })
+
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Delete failed (${response.status}): ${err}`)
+  }
+
+  return response.json()
+}
+
+/**
  * Translate job artifacts into a target language.
  * POST /api/v1/translate
  * @param {string[]} [files] - subset of ['json', 'txt', 'summary_txt']; defaults to all three
