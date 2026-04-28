@@ -512,6 +512,13 @@ class TranslateRequest(BaseModel):
     files: Optional[List[Literal["json", "txt", "summary_txt"]]] = None
 
 
+class RetranscribeRequest(BaseModel):
+    google_token: str
+    folder_name: str
+    file_name: str
+    transcribe_lang: Optional[str] = None
+
+
 class ChunkedUploadInitRequest(BaseModel):
     google_token: str
     filename: str
@@ -932,6 +939,101 @@ async def transcribe_audio(
                 "folder_name": folder_name,
                 "file_name": safe_stem,
                 "elapsed": elapsed,
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =========================================================
+# API: RE-TRANSCRIBE EXISTING JOB
+# =========================================================
+
+@app.post("/api/v1/retranscribe")
+async def retranscribe_audio(req: RetranscribeRequest):
+    """
+    Re-runs transcription on an existing job using its already-converted WAV
+    file.  Overwrites <base>.json and <base>.txt, resets the summarize and
+    visualize manifest statuses to 'pending', and returns the new transcript.
+    """
+    try:
+        user_id = _resolve_user(req.google_token)
+        folder_name = _sanitize_name(req.folder_name, "folder_name")
+        file_name = _sanitize_name(req.file_name, "file_name")
+
+        job_dir = _safe_join(BASE_DIR, user_id, folder_name)
+        manifest = _read_manifest(job_dir)
+
+        # Determine which audio file to use (prefer denoised if it exists)
+        audio_proc = manifest.get("audio_processing", {})
+        noise_applied = audio_proc.get("noise_reduction_applied", False)
+        denoised_name = manifest.get("files", {}).get("audio_denoised")
+        wav_name = manifest.get("files", {}).get("audio", f"{file_name}.wav")
+
+        if noise_applied and denoised_name:
+            audio_path = _safe_join(job_dir, denoised_name)
+            if not os.path.exists(audio_path):
+                audio_path = _safe_join(job_dir, wav_name)
+        else:
+            audio_path = _safe_join(job_dir, wav_name)
+
+        if not os.path.exists(audio_path):
+            raise HTTPException(
+                status_code=404,
+                detail="Audio file not found. Cannot re-transcribe.",
+            )
+
+        json_path = _safe_join(job_dir, f"{file_name}.json")
+        txt_path = _safe_join(job_dir, f"{file_name}.txt")
+
+        # Back up existing transcript files so originals can be restored on failure
+        json_backup = json_path + ".bak"
+        txt_backup = txt_path + ".bak"
+        if os.path.exists(json_path):
+            shutil.copy2(json_path, json_backup)
+        if os.path.exists(txt_path):
+            shutil.copy2(txt_path, txt_backup)
+
+        try:
+            print(f"\n[INFO] Re-transcribing {file_name}...")
+            t_start = time.monotonic()
+            diarize_and_transcribe(audio_path, json_path, lang=req.transcribe_lang)
+            json_to_txt(json_path, txt_path)
+            elapsed_sec = round(time.monotonic() - t_start, 2)
+        except Exception:
+            # Restore backups so the job folder is not left in a corrupt state
+            if os.path.exists(json_backup):
+                shutil.move(json_backup, json_path)
+            if os.path.exists(txt_backup):
+                shutil.move(txt_backup, txt_path)
+            raise
+        finally:
+            # Clean up backup files on success (errors re-raise, so this always runs)
+            for bak in (json_backup, txt_backup):
+                with contextlib.suppress(FileNotFoundError):
+                    os.remove(bak)
+
+        with open(txt_path, "r", encoding="utf-8") as fh:
+            transcript_text = fh.read()
+
+        manifest["status"]["transcribe"] = "done"
+        manifest["status"]["summarize"] = "pending"
+        manifest["status"]["visualize"] = "pending"
+        manifest["updated_at"] = _now_iso()
+        manifest.setdefault("elapsed", {})["retranscribe_seconds"] = elapsed_sec
+        _write_manifest(job_dir, manifest)
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Re-transcription complete",
+                "folder_name": folder_name,
+                "file_name": file_name,
+                "transcript": transcript_text,
+                "elapsed": {"transcribe_seconds": elapsed_sec},
             },
         )
     except HTTPException:

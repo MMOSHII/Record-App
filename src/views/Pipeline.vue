@@ -334,15 +334,26 @@
             <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             Transcription
           </h3>
-          <a
-            v-if="pipeline.folderName"
-            :href="downloadUrl('transcript')"
-            download
-            class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition flex items-center gap-1"
-          >
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-            Download
-          </a>
+          <div class="flex items-center gap-3">
+            <button
+              @click="rerunTranscribe"
+              :disabled="pipeline.status === 'running'"
+              class="text-xs text-slate-500 hover:text-indigo-600 disabled:opacity-40 font-semibold transition flex items-center gap-1"
+              title="Re-run transcription"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Re-run
+            </button>
+            <a
+              v-if="pipeline.folderName"
+              :href="downloadUrl('transcript')"
+              download
+              class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition flex items-center gap-1"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Download
+            </a>
+          </div>
         </div>
         <div class="bg-slate-50 rounded-xl p-4 text-sm text-slate-700 leading-relaxed max-h-48 overflow-y-auto">
           {{ pipeline.results.transcription }}
@@ -356,7 +367,16 @@
             <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h10"/></svg>
             Summary
           </h3>
-          <div v-if="pipeline.folderName" class="flex gap-3">
+          <div v-if="pipeline.folderName" class="flex items-center gap-3">
+            <button
+              @click="rerunSummarize"
+              :disabled="pipeline.status === 'running'"
+              class="text-xs text-slate-500 hover:text-indigo-600 disabled:opacity-40 font-semibold transition flex items-center gap-1"
+              title="Re-run summarization"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Re-run
+            </button>
             <a
               :href="downloadUrl('summary')"
               download
@@ -387,7 +407,16 @@
             <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
             Visualization
           </h3>
-          <div v-if="pipeline.folderName" class="flex gap-3">
+          <div v-if="pipeline.folderName" class="flex items-center gap-3">
+            <button
+              @click="rerunVisualize"
+              :disabled="pipeline.status === 'running'"
+              class="text-xs text-slate-500 hover:text-indigo-600 disabled:opacity-40 font-semibold transition flex items-center gap-1"
+              title="Re-run visualization"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Re-run
+            </button>
             <a
               :href="downloadUrl('mindmap_png')"
               download
@@ -795,6 +824,52 @@ const runVisualize = async () => {
     pipeline.status = 'error'
     pipeline.lastError = err.message
   }
+}
+
+const rerunTranscribe = async () => {
+  if (!pipeline.folderName) return
+
+  pipeline.status = 'running'
+  pipeline.lastError = ''
+
+  try {
+    const result = await api.retranscribeJob(pipeline.folderName, pipeline.fileName)
+    pipeline.results = {
+      transcription: result.transcript || '',
+      summary: '',
+      keywords: [],
+      mindmap_svg: '',
+      mindmap_html: ''
+    }
+    pipeline.currentStep = 2
+    pipeline.status = 'idle'
+  } catch (err) {
+    pipeline.status = 'error'
+    pipeline.lastError = err.message
+    return
+  }
+
+  await runSummarize()
+}
+
+const rerunSummarize = async () => {
+  pipeline.results = {
+    ...pipeline.results,
+    summary: '',
+    keywords: [],
+    mindmap_svg: '',
+    mindmap_html: ''
+  }
+  await runSummarize()
+}
+
+const rerunVisualize = async () => {
+  pipeline.results = {
+    ...pipeline.results,
+    mindmap_svg: '',
+    mindmap_html: ''
+  }
+  await runVisualize()
 }
 
 onMounted(() => {

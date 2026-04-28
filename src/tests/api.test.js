@@ -287,6 +287,38 @@ describe('completeChunkedUpload', () => {
   })
 })
 
+describe('retranscribeJob', () => {
+  it('POSTs to /api/v1/retranscribe with correct JSON body', async () => {
+    const result = { message: 'Re-transcription complete', folder_name: 'job_1', file_name: 'audio', transcript: 'Hello world' }
+    global.fetch = vi.fn().mockResolvedValue(makeResponse(result))
+
+    const data = await api.retranscribeJob('job_1', 'audio', 'en')
+
+    expect(global.fetch).toHaveBeenCalledOnce()
+    const [url, opts] = global.fetch.mock.calls[0]
+    expect(url).toBe('https://api.example.com/api/v1/retranscribe')
+    expect(opts.method).toBe('POST')
+    const body = JSON.parse(opts.body)
+    expect(body.google_token).toBe('test-token')
+    expect(body.folder_name).toBe('job_1')
+    expect(body.file_name).toBe('audio')
+    expect(body.transcribe_lang).toBe('en')
+    expect(data).toEqual(result)
+  })
+
+  it('omits transcribe_lang when not provided', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse({ folder_name: 'job_1' }))
+    await api.retranscribeJob('job_1', 'audio')
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body)
+    expect(body.transcribe_lang).toBeUndefined()
+  })
+
+  it('throws an error on non-ok response', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse('Not found', false, 404))
+    await expect(api.retranscribeJob('job_1', 'audio')).rejects.toThrow('Re-transcription failed (404)')
+  })
+})
+
 describe('translateJob', () => {
   it('POSTs to /api/v1/translate with correct JSON body', async () => {
     const result = { message: 'Translation complete', folder_name: 'job_1', files: {} }

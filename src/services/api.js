@@ -218,6 +218,31 @@ export async function completeChunkedUpload(uploadId, transcribeLang) {
 }
 
 /**
+ * Re-run transcription on an already-uploaded job using its existing WAV.
+ * POST /api/v1/retranscribe
+ */
+export async function retranscribeJob(folderName, fileName, transcribeLang) {
+  const url = `${store.getBaseUrl()}/api/v1/retranscribe`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      google_token: store.state.token,
+      folder_name: folderName,
+      file_name: fileName,
+      transcribe_lang: transcribeLang || undefined
+    })
+  })
+
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Re-transcription failed (${response.status}): ${err}`)
+  }
+
+  return response.json()
+}
+
+/**
  * Translate job artifacts into a target language.
  * POST /api/v1/translate
  * @param {string[]} [files] - subset of ['json', 'txt', 'summary_txt']; defaults to all three
