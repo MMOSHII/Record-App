@@ -6,13 +6,87 @@
           <h1 class="text-xl font-extrabold text-slate-900">History</h1>
           <p class="text-sm text-slate-500 mt-1">Your past audio processing jobs.</p>
         </div>
-        <button
-          @click="loadHistory"
-          :disabled="loading"
-          class="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-2 rounded-xl text-sm transition disabled:opacity-50"
-        >
-          {{ loading ? 'Loading…' : 'Refresh' }}
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            v-if="jobs.length"
+            @click="toggleSelectMode"
+            class="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-2 rounded-xl text-sm transition"
+          >
+            {{ selectMode ? 'Cancel' : 'Select' }}
+          </button>
+          <button
+            @click="loadHistory"
+            :disabled="loading"
+            class="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-2 rounded-xl text-sm transition disabled:opacity-50"
+          >
+            {{ loading ? 'Loading…' : 'Refresh' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Search / filter -->
+      <div class="mt-4">
+        <input
+          v-model="searchQuery"
+          type="search"
+          placeholder="Search by job name…"
+          class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50"
+        />
+      </div>
+    </div>
+
+    <!-- Delete selection toolbar -->
+    <div
+      v-if="selectMode && jobs.length"
+      class="bg-white rounded-2xl shadow-sm border border-slate-200 px-5 py-3 flex items-center gap-3 flex-wrap"
+    >
+      <label class="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          :checked="allVisibleSelected"
+          :indeterminate.prop="someVisibleSelected && !allVisibleSelected"
+          @change="toggleSelectAll"
+          class="w-4 h-4 rounded accent-indigo-600"
+        />
+        {{ allVisibleSelected ? 'Deselect all' : 'Select all' }}
+      </label>
+      <span class="text-sm text-slate-400">{{ selectedCount }} selected</span>
+      <div class="flex-1" />
+      <button
+        @click="confirmDelete"
+        :disabled="selectedCount === 0 || deleting"
+        class="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-4 py-2 rounded-xl text-sm transition"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+        </svg>
+        {{ deleting ? 'Deleting…' : `Delete${selectedCount ? ` (${selectedCount})` : ''}` }}
+      </button>
+    </div>
+
+    <!-- Delete confirmation dialog -->
+    <div
+      v-if="showDeleteConfirm"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      @click.self="showDeleteConfirm = false"
+    >
+      <div class="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
+        <h2 class="text-base font-extrabold text-slate-900 mb-2">Delete {{ selectedCount }} job{{ selectedCount !== 1 ? 's' : '' }}?</h2>
+        <p class="text-sm text-slate-500 mb-5">This will permanently remove all files for the selected jobs. This action cannot be undone.</p>
+        <div class="flex gap-3">
+          <button
+            @click="showDeleteConfirm = false"
+            class="flex-1 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition"
+          >
+            Cancel
+          </button>
+          <button
+            @click="executeDelete"
+            class="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition"
+          >
+            Delete
+          </button>
+        </div>
       </div>
     </div>
 
@@ -35,12 +109,15 @@
     </div>
 
     <div
-      v-else-if="!loading && !jobs.length && !error"
+      v-else-if="!loading && !filteredJobs.length && !error"
       class="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center"
     >
-      <h3 class="text-base font-bold text-slate-700">No jobs yet</h3>
-      <p class="text-sm text-slate-400 mt-1">Process your first audio file on the Home page.</p>
+      <h3 class="text-base font-bold text-slate-700">{{ searchQuery ? 'No matching jobs' : 'No jobs yet' }}</h3>
+      <p class="text-sm text-slate-400 mt-1">
+        {{ searchQuery ? 'Try a different search term.' : 'Process your first audio file on the Home page.' }}
+      </p>
       <router-link
+        v-if="!searchQuery"
         to="/"
         class="inline-block mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm px-4 py-2 rounded-xl transition"
       >
@@ -50,18 +127,29 @@
 
     <div v-else class="space-y-4">
       <div
-        v-for="job in jobs"
+        v-for="job in filteredJobs"
         :key="job.folder_name"
         class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
+        :class="{ 'ring-2 ring-indigo-400': selectMode && selected[job.folder_name] }"
       >
         <div
-          @click="openJobDetail(job.folder_name)"
-          @keydown.enter="openJobDetail(job.folder_name)"
+          @click="selectMode ? toggleSelect(job.folder_name) : openJobDetail(job.folder_name)"
+          @keydown.enter="selectMode ? toggleSelect(job.folder_name) : openJobDetail(job.folder_name)"
           role="button"
           tabindex="0"
           class="w-full flex items-start justify-between p-5 text-left hover:bg-slate-50 transition cursor-pointer"
         >
-          <div>
+          <!-- Checkbox in select mode -->
+          <div v-if="selectMode" class="flex-shrink-0 flex items-center mr-3 mt-0.5">
+            <input
+              type="checkbox"
+              :checked="selected[job.folder_name]"
+              @click.stop="toggleSelect(job.folder_name)"
+              class="w-4 h-4 rounded accent-indigo-600 cursor-pointer"
+            />
+          </div>
+
+          <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 flex-wrap">
               <span class="px-2 py-0.5 rounded-md text-xs font-bold" :class="statusClass(job.status)">
                 {{ displayStatus(job.status) }}
@@ -71,7 +159,7 @@
             <p v-if="job.file_name" class="text-xs text-slate-500 mt-1">{{ job.file_name }}</p>
             <p v-if="job.created_at" class="text-xs text-slate-400 mt-0.5">{{ formatDate(job.created_at) }}</p>
           </div>
-          <div class="flex items-center gap-2 mt-1 flex-shrink-0">
+          <div v-if="!selectMode" class="flex items-center gap-2 mt-1 flex-shrink-0">
             <button
               v-if="isPending(job)"
               @click.stop="reRunJob(job)"
@@ -89,9 +177,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getHistory, summarizeJob, visualizeJob } from '../services/api.js'
+import { getHistory, summarizeJob, visualizeJob, deleteJobs } from '../services/api.js'
 import { useAppStore } from '../stores/appStore'
 
 const router = useRouter()
@@ -101,6 +189,82 @@ const jobs = ref(Array.isArray(store.state.historyCache) ? [...store.state.histo
 const loading = ref(false)
 const error = ref('')
 const reRunning = reactive({})
+const searchQuery = ref('')
+
+// ── Selection state ──────────────────────────────────────
+const selectMode = ref(false)
+const selected = reactive({})
+const deleting = ref(false)
+const showDeleteConfirm = ref(false)
+
+const selectedCount = computed(() => Object.values(selected).filter(Boolean).length)
+
+const allVisibleSelected = computed(() =>
+  filteredJobs.value.length > 0 &&
+  filteredJobs.value.every(j => selected[j.folder_name])
+)
+
+const someVisibleSelected = computed(() =>
+  filteredJobs.value.some(j => selected[j.folder_name])
+)
+
+const toggleSelectMode = () => {
+  selectMode.value = !selectMode.value
+  if (!selectMode.value) {
+    // clear selections when leaving select mode
+    Object.keys(selected).forEach(k => delete selected[k])
+  }
+}
+
+const toggleSelect = (folderName) => {
+  selected[folderName] = !selected[folderName]
+}
+
+const toggleSelectAll = () => {
+  if (allVisibleSelected.value) {
+    filteredJobs.value.forEach(j => delete selected[j.folder_name])
+  } else {
+    filteredJobs.value.forEach(j => { selected[j.folder_name] = true })
+  }
+}
+
+const confirmDelete = () => {
+  if (selectedCount.value === 0) return
+  showDeleteConfirm.value = true
+}
+
+const executeDelete = async () => {
+  showDeleteConfirm.value = false
+  const names = Object.entries(selected)
+    .filter(([, v]) => v)
+    .map(([k]) => k)
+  if (!names.length) return
+
+  deleting.value = true
+  error.value = ''
+  try {
+    await deleteJobs(names)
+    // Remove deleted entries from local state immediately
+    jobs.value = jobs.value.filter(j => !names.includes(j.folder_name))
+    store.state.historyCache = [...jobs.value]
+    names.forEach(k => delete selected[k])
+    selectMode.value = false
+  } catch (err) {
+    error.value = err.message
+  } finally {
+    deleting.value = false
+  }
+}
+// ─────────────────────────────────────────────────────────
+
+const filteredJobs = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return jobs.value
+  return jobs.value.filter(job =>
+    String(job.folder_name || '').toLowerCase().includes(q) ||
+    String(job.file_name || '').toLowerCase().includes(q)
+  )
+})
 
 const statusClass = (status) => {
   const map = {

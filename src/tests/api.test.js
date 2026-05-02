@@ -181,3 +181,203 @@ describe('getDownloadUrl', () => {
     expect(url).toContain('/audio')
   })
 })
+
+describe('initChunkedUpload', () => {
+  it('POSTs to /api/v1/upload/init with correct JSON body', async () => {
+    const result = { upload_id: 'up_abc123', total_chunks: 5, received_chunks: [] }
+    global.fetch = vi.fn().mockResolvedValue(makeResponse(result))
+
+    const data = await api.initChunkedUpload('audio.mp3', 5, 10485760, 'id')
+
+    expect(global.fetch).toHaveBeenCalledOnce()
+    const [url, opts] = global.fetch.mock.calls[0]
+    expect(url).toBe('https://api.example.com/api/v1/upload/init')
+    expect(opts.method).toBe('POST')
+    const body = JSON.parse(opts.body)
+    expect(body.google_token).toBe('test-token')
+    expect(body.filename).toBe('audio.mp3')
+    expect(body.total_chunks).toBe(5)
+    expect(body.file_size).toBe(10485760)
+    expect(body.transcribe_lang).toBe('id')
+    expect(data).toEqual(result)
+  })
+
+  it('omits transcribe_lang when not provided', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse({ upload_id: 'up_xyz' }))
+    await api.initChunkedUpload('audio.mp3', 3, 1024)
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body)
+    expect(body.transcribe_lang).toBeUndefined()
+  })
+
+  it('throws an error on non-ok response', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse('Bad request', false, 400))
+    await expect(api.initChunkedUpload('audio.mp3', 5, 1024)).rejects.toThrow('Upload init failed (400)')
+  })
+})
+
+describe('uploadChunk', () => {
+  it('POSTs to /api/v1/upload/chunk as FormData', async () => {
+    const result = { upload_id: 'up_abc', chunk_index: 0, received_chunks: [0] }
+    global.fetch = vi.fn().mockResolvedValue(makeResponse(result))
+
+    const blob = new Blob(['chunk data'], { type: 'application/octet-stream' })
+    const data = await api.uploadChunk('up_abc', 0, blob)
+
+    expect(global.fetch).toHaveBeenCalledOnce()
+    const [url, opts] = global.fetch.mock.calls[0]
+    expect(url).toBe('https://api.example.com/api/v1/upload/chunk')
+    expect(opts.method).toBe('POST')
+    expect(opts.body).toBeInstanceOf(FormData)
+    expect(data).toEqual(result)
+  })
+
+  it('throws an error with chunk index on non-ok response', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse('Server error', false, 500))
+    const blob = new Blob(['x'])
+    await expect(api.uploadChunk('up_abc', 2, blob)).rejects.toThrow('Chunk 2 upload failed (500)')
+  })
+})
+
+describe('getUploadStatus', () => {
+  it('GETs /api/v1/upload/status/{upload_id} with google_token', async () => {
+    const result = { upload_id: 'up_abc', total_chunks: 5, received_chunks: [0, 1], missing_chunks: [2, 3, 4] }
+    global.fetch = vi.fn().mockResolvedValue(makeResponse(result))
+
+    const data = await api.getUploadStatus('up_abc')
+
+    const [url] = global.fetch.mock.calls[0]
+    expect(url).toContain('/api/v1/upload/status/up_abc')
+    expect(url).toContain('google_token=test-token')
+    expect(data).toEqual(result)
+  })
+
+  it('throws an error on non-ok response', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse('Not found', false, 404))
+    await expect(api.getUploadStatus('up_missing')).rejects.toThrow('Upload status check failed (404)')
+  })
+})
+
+describe('completeChunkedUpload', () => {
+  it('POSTs to /api/v1/upload/complete with correct JSON body', async () => {
+    const result = { folder_name: 'job_1', file_name: 'audio', transcript: 'Hello' }
+    global.fetch = vi.fn().mockResolvedValue(makeResponse(result))
+
+    const data = await api.completeChunkedUpload('up_abc', 'en')
+
+    const [url, opts] = global.fetch.mock.calls[0]
+    expect(url).toBe('https://api.example.com/api/v1/upload/complete')
+    expect(opts.method).toBe('POST')
+    const body = JSON.parse(opts.body)
+    expect(body.google_token).toBe('test-token')
+    expect(body.upload_id).toBe('up_abc')
+    expect(body.transcribe_lang).toBe('en')
+    expect(data).toEqual(result)
+  })
+
+  it('omits transcribe_lang when not provided', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse({ folder_name: 'job_1' }))
+    await api.completeChunkedUpload('up_abc')
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body)
+    expect(body.transcribe_lang).toBeUndefined()
+  })
+
+  it('throws an error on non-ok response', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse('Incomplete', false, 400))
+    await expect(api.completeChunkedUpload('up_abc')).rejects.toThrow('Upload complete failed (400)')
+  })
+})
+
+describe('deleteJobs', () => {
+  it('POSTs to /api/v1/history/delete with correct JSON body', async () => {
+    const result = { deleted: ['job_1', 'job_2'], not_found: [] }
+    global.fetch = vi.fn().mockResolvedValue(makeResponse(result))
+
+    const data = await api.deleteJobs(['job_1', 'job_2'])
+
+    expect(global.fetch).toHaveBeenCalledOnce()
+    const [url, opts] = global.fetch.mock.calls[0]
+    expect(url).toBe('https://api.example.com/api/v1/history/delete')
+    expect(opts.method).toBe('POST')
+    const body = JSON.parse(opts.body)
+    expect(body.google_token).toBe('test-token')
+    expect(body.folder_names).toEqual(['job_1', 'job_2'])
+    expect(data).toEqual(result)
+  })
+
+  it('sends a single folder name correctly', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse({ deleted: ['job_1'], not_found: [] }))
+    await api.deleteJobs(['job_1'])
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body)
+    expect(body.folder_names).toEqual(['job_1'])
+  })
+
+  it('throws an error on non-ok response', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse('Forbidden', false, 403))
+    await expect(api.deleteJobs(['job_1'])).rejects.toThrow('Delete failed (403)')
+  })
+})
+
+describe('retranscribeJob', () => {
+  it('POSTs to /api/v1/retranscribe with correct JSON body', async () => {
+    const result = { message: 'Re-transcription complete', folder_name: 'job_1', file_name: 'audio', transcript: 'Hello world' }
+    global.fetch = vi.fn().mockResolvedValue(makeResponse(result))
+
+    const data = await api.retranscribeJob('job_1', 'audio', 'en')
+
+    expect(global.fetch).toHaveBeenCalledOnce()
+    const [url, opts] = global.fetch.mock.calls[0]
+    expect(url).toBe('https://api.example.com/api/v1/retranscribe')
+    expect(opts.method).toBe('POST')
+    const body = JSON.parse(opts.body)
+    expect(body.google_token).toBe('test-token')
+    expect(body.folder_name).toBe('job_1')
+    expect(body.file_name).toBe('audio')
+    expect(body.transcribe_lang).toBe('en')
+    expect(data).toEqual(result)
+  })
+
+  it('omits transcribe_lang when not provided', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse({ folder_name: 'job_1' }))
+    await api.retranscribeJob('job_1', 'audio')
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body)
+    expect(body.transcribe_lang).toBeUndefined()
+  })
+
+  it('throws an error on non-ok response', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse('Not found', false, 404))
+    await expect(api.retranscribeJob('job_1', 'audio')).rejects.toThrow('Re-transcription failed (404)')
+  })
+})
+
+describe('translateJob', () => {
+  it('POSTs to /api/v1/translate with correct JSON body', async () => {
+    const result = { message: 'Translation complete', folder_name: 'job_1', files: {} }
+    global.fetch = vi.fn().mockResolvedValue(makeResponse(result))
+
+    const data = await api.translateJob('job_1', 'audio', 'Indonesian', 'English', ['json', 'txt'])
+
+    const [url, opts] = global.fetch.mock.calls[0]
+    expect(url).toBe('https://api.example.com/api/v1/translate')
+    expect(opts.method).toBe('POST')
+    const body = JSON.parse(opts.body)
+    expect(body.google_token).toBe('test-token')
+    expect(body.folder_name).toBe('job_1')
+    expect(body.file_name).toBe('audio')
+    expect(body.source_language).toBe('Indonesian')
+    expect(body.target_language).toBe('English')
+    expect(body.files).toEqual(['json', 'txt'])
+    expect(data).toEqual(result)
+  })
+
+  it('omits files when not provided', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse({ message: 'ok' }))
+    await api.translateJob('job_1', 'audio', 'id', 'en')
+    const body = JSON.parse(global.fetch.mock.calls[0][1].body)
+    expect(body.files).toBeUndefined()
+  })
+
+  it('throws an error on non-ok response', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeResponse('Bad language', false, 400))
+    await expect(api.translateJob('job_1', 'audio', 'id', 'en')).rejects.toThrow('Translation failed (400)')
+  })
+})
