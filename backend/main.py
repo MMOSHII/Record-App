@@ -1683,7 +1683,8 @@ async def job_details(folder_name: str, google_token: str):
 # =========================================================
 
 FileType = Literal[
-    "audio", "summary_txt", "summary_html", "image", "transcript_txt", "transcript_json"
+    "audio", "summary_txt", "summary_html", "image", "transcript_txt", "transcript_json",
+    "flashcards_json"
 ]
 
 _FILE_KEY_MAP: Dict[str, str] = {
@@ -1693,6 +1694,7 @@ _FILE_KEY_MAP: Dict[str, str] = {
     "image": "timeline_png",
     "transcript_txt": "transcript_txt",
     "transcript_json": "transcript_json",
+    "flashcards_json": "flashcards_json",
 }
 
 

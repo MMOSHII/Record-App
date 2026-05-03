@@ -502,9 +502,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
-import { getJob, getDownloadUrl, summarizeJob, visualizeJob, translateJob } from '../services/api'
+import { getJob, getDownloadUrl, summarizeJob, visualizeJob, translateJob, generateFlashcards, sendChatMessage } from '../services/api'
 import { useAppStore } from '../stores/appStore'
 
 const route = useRoute()
@@ -536,6 +536,8 @@ const uiState = ref({
   raw: true,
   audio: true,
   visualization: true,
+  flashcards: false,
+  chatbot: false,
   actions: true
 })
 

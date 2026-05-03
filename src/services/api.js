@@ -296,3 +296,62 @@ export async function translateJob(folderName, fileName, sourceLang, targetLang,
 
   return response.json()
 }
+
+/**
+ * Generate flashcards from a transcribed job.
+ * POST /api/v1/flashcards
+ * @param {number} [count=10] - number of flashcards to generate (1-100)
+ */
+export async function generateFlashcards(folderName, fileName, count = 10) {
+  const url = `${store.getBaseUrl()}/api/v1/flashcards`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      google_token: store.state.token,
+      folder_name: folderName,
+      file_name: fileName,
+      provider: store.state.settings.provider,
+      model: store.state.settings.model || undefined,
+      api_key: store.state.settings.apiKey || undefined,
+      count
+    })
+  })
+
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Flashcards generation failed (${response.status}): ${err}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Send a chat message about the transcript to the AI assistant.
+ * POST /api/v1/chat
+ * @param {{ role: string, content: string }[]} [history=[]] - previous conversation turns
+ */
+export async function sendChatMessage(folderName, fileName, question, history = []) {
+  const url = `${store.getBaseUrl()}/api/v1/chat`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      google_token: store.state.token,
+      folder_name: folderName,
+      file_name: fileName,
+      question,
+      provider: store.state.settings.provider,
+      model: store.state.settings.model || undefined,
+      api_key: store.state.settings.apiKey || undefined,
+      history: history.length ? history : undefined
+    })
+  })
+
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Chat failed (${response.status}): ${err}`)
+  }
+
+  return response.json()
+}
