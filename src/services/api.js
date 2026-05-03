@@ -121,9 +121,12 @@ export async function getHistory() {
  * Build a download URL for an artifact.
  * GET /api/v1/download/{folder_name}/{file_type}
  * @param {string} fileType - one of: 'audio', 'summary_txt', 'summary_html', 'image', 'transcript_txt', 'transcript_json'
+ * @param {string|null} [langPair] - optional translation key, e.g. 'indonesian_to_english'
  */
-export function getDownloadUrl(folderName, fileType) {
-  return store.getAuthUrl(`/api/v1/download/${encodeURIComponent(folderName)}/${encodeURIComponent(fileType)}`)
+export function getDownloadUrl(folderName, fileType, langPair = null) {
+  const endpoint = `/api/v1/download/${encodeURIComponent(folderName)}/${encodeURIComponent(fileType)}`
+  const withLang = langPair ? `${endpoint}?lang_pair=${encodeURIComponent(langPair)}` : endpoint
+  return store.getAuthUrl(withLang)
 }
 
 /**

@@ -1669,16 +1669,37 @@ _FILE_KEY_MAP: Dict[str, str] = {
 
 
 @app.get("/api/v1/download/{folder_name}/{file_type}")
-async def download(folder_name: str, file_type: FileType, google_token: str):
-    """Stream a single artifact file from the job folder."""
+async def download(folder_name: str, file_type: FileType, google_token: str, lang_pair: Optional[str] = None):
+    """Stream a single artifact file from the job folder.
+
+    When *lang_pair* is supplied (e.g. ``indonesian_to_english``) the endpoint
+    serves the corresponding translated file stored under
+    ``manifest["translations"][lang_pair]`` instead of the primary artifact.
+    """
     user_id = _resolve_user(google_token)
     job_dir = _safe_join(BASE_DIR, user_id, _sanitize_name(folder_name, "folder_name"))
     manifest = _read_manifest(job_dir)
 
     mf_key = _FILE_KEY_MAP[file_type]
-    raw_filename = manifest.get("files", {}).get(mf_key)
-    if not raw_filename:
-        raise HTTPException(status_code=404, detail=f"{file_type} is not available yet.")
+
+    if lang_pair:
+        # Validate lang_pair: only allow alphanumeric characters and underscores
+        # (matches the output of _language_token, e.g. "indonesian_to_english")
+        if not all(c.isalnum() or c == "_" for c in lang_pair) or not lang_pair:
+            raise HTTPException(status_code=400, detail="Invalid lang_pair value.")
+        translations = manifest.get("translations", {})
+        if lang_pair not in translations:
+            raise HTTPException(status_code=404, detail=f"Translation '{lang_pair}' not found.")
+        raw_filename = translations[lang_pair].get(mf_key)
+        if not raw_filename:
+            raise HTTPException(
+                status_code=404,
+                detail=f"'{file_type}' is not available for translation '{lang_pair}'.",
+            )
+    else:
+        raw_filename = manifest.get("files", {}).get(mf_key)
+        if not raw_filename:
+            raise HTTPException(status_code=404, detail=f"{file_type} is not available yet.")
 
     filename = _sanitize_name(raw_filename, "filename")
     file_path = _safe_join(job_dir, filename)

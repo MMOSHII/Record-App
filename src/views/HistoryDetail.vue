@@ -61,6 +61,45 @@
       <p class="text-sm font-semibold text-red-700">{{ error }}</p>
     </div>
 
+    <!-- ───────────────────────── Language Switcher ───────────────────────── -->
+    <div v-if="!loading && availableTranslations.length > 0" class="bg-white rounded-2xl shadow-sm border border-slate-200 px-6 py-4">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wide flex-shrink-0">
+          <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/>
+          </svg>
+          View in:
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button
+            @click="switchToTranslation(null)"
+            :class="selectedLangPair === null
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+            class="text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+          >
+            Original
+          </button>
+          <button
+            v-for="lp in availableTranslations"
+            :key="lp"
+            @click="switchToTranslation(lp)"
+            :class="selectedLangPair === lp
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+            class="text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+          >
+            {{ langPairLabel(lp) }}
+          </button>
+        </div>
+        <svg v-if="viewLoading" class="w-4 h-4 animate-spin text-indigo-500 ml-1" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+      </div>
+      <p v-if="viewError" class="mt-2 text-xs text-red-600 font-semibold">{{ viewError }}</p>
+    </div>
+
     <!-- ───────────────────────── Skeleton Loading ───────────────────────── -->
     <template v-if="loading">
       <div v-for="n in 3" :key="n" class="bg-white rounded-2xl border border-slate-200 p-6 animate-pulse">
@@ -530,6 +569,30 @@ const translateForm = reactive({
   files: ['json', 'txt', 'summary_txt']
 })
 
+// --- Language switcher (view translated content) ---
+const selectedLangPair = ref(null)
+const viewLoading = ref(false)
+const viewError = ref('')
+
+// Backup of original (untranslated) content, populated after loadDetail
+const originalDetail = ref({ transcript: '', summary: '' })
+const originalTranscriptData = ref([])
+
+// Derive a user-friendly label from a lang_pair token (e.g. "indonesian_to_english" → "Indonesian → English")
+const langPairLabel = (langPair) => {
+  const parts = langPair.split('_to_')
+  if (parts.length !== 2) return langPair
+  const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1)
+  return `${cap(parts[0])} → ${cap(parts[1])}`
+}
+
+// Available translations derived from the manifest
+const availableTranslations = computed(() => {
+  const translations = manifest.value?.translations
+  if (!translations || typeof translations !== 'object') return []
+  return Object.keys(translations)
+})
+
 // --- Status helpers ---
 const statusClass = (status) => {
   const map = {
@@ -685,6 +748,10 @@ const resetDetailState = () => {
   transcriptData.value = []
   speakerSettings.value = {}
   activeLanguages.value = []
+  selectedLangPair.value = null
+  viewError.value = ''
+  originalDetail.value = { transcript: '', summary: '' }
+  originalTranscriptData.value = []
 }
 
 const hasDetailContent = (payload) => {
@@ -788,6 +855,9 @@ const loadDetail = async () => {
       detail.value.transcript = ''
     }
     saveCachedDetail()
+    // Save original content for the language switcher
+    originalDetail.value = { summary: detail.value.summary, transcript: detail.value.transcript }
+    originalTranscriptData.value = transcriptData.value.map(({ _id, ...rest }) => ({ ...rest }))
 
   } catch (err) {
     if (!applyCachedDetail(cached)) {
@@ -864,7 +934,67 @@ const runTranslateDetail = async () => {
   }
 }
 
-const downloadUrl = (fileType) => getDownloadUrl(folderName.value, fileType)
+const downloadUrl = (fileType) => getDownloadUrl(folderName.value, fileType, selectedLangPair.value)
+
+const switchToTranslation = async (langPair) => {
+  selectedLangPair.value = langPair
+  viewError.value = ''
+
+  if (!langPair) {
+    // Restore original content
+    detail.value = { summary: originalDetail.value.summary, transcript: originalDetail.value.transcript }
+    transcriptData.value = originalTranscriptData.value.map((item, i) => ({ ...item, _id: i }))
+    if (transcriptData.value.length) initDashboard()
+    else { speakerSettings.value = {}; activeLanguages.value = [] }
+    return
+  }
+
+  viewLoading.value = true
+  const translations = manifest.value?.translations?.[langPair] || {}
+  try {
+    // Fetch translated summary
+    if (translations.summary_txt) {
+      const url = getDownloadUrl(folderName.value, 'summary_txt', langPair)
+      const r = await fetch(url)
+      if (r.ok) detail.value.summary = await r.text()
+      else detail.value.summary = originalDetail.value.summary
+    } else {
+      detail.value.summary = originalDetail.value.summary
+    }
+
+    // Fetch translated JSON transcript
+    if (translations.transcript_json) {
+      const url = getDownloadUrl(folderName.value, 'transcript_json', langPair)
+      const r = await fetch(url)
+      if (r.ok) {
+        const raw = await r.json()
+        transcriptData.value = raw.map((item, i) => ({ ...item, _id: i }))
+        initDashboard()
+      } else {
+        transcriptData.value = originalTranscriptData.value.map((item, i) => ({ ...item, _id: i }))
+        if (transcriptData.value.length) initDashboard()
+      }
+    } else {
+      transcriptData.value = originalTranscriptData.value.map((item, i) => ({ ...item, _id: i }))
+      if (transcriptData.value.length) initDashboard()
+      else { speakerSettings.value = {}; activeLanguages.value = [] }
+    }
+
+    // Fetch translated raw TXT transcript
+    if (translations.transcript_txt) {
+      const url = getDownloadUrl(folderName.value, 'transcript_txt', langPair)
+      const r = await fetch(url)
+      if (r.ok) detail.value.transcript = await r.text()
+      else detail.value.transcript = originalDetail.value.transcript
+    } else {
+      detail.value.transcript = originalDetail.value.transcript
+    }
+  } catch (e) {
+    viewError.value = `Failed to load translated content: ${e.message}`
+  } finally {
+    viewLoading.value = false
+  }
+}
 
 watch(() => route.params.folderName, loadDetail, { immediate: true })
 </script>

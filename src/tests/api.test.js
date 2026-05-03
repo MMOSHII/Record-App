@@ -180,6 +180,18 @@ describe('getDownloadUrl', () => {
     expect(url).toContain('job%2F1')
     expect(url).toContain('/audio')
   })
+
+  it('appends lang_pair query param when provided', async () => {
+    const url = api.getDownloadUrl('job_1', 'summary_txt', 'indonesian_to_english')
+    expect(url).toContain('/api/v1/download/job_1/summary_txt')
+    expect(url).toContain('lang_pair=indonesian_to_english')
+    expect(url).toContain('google_token=test-token')
+  })
+
+  it('does not append lang_pair when null', async () => {
+    const url = api.getDownloadUrl('job_1', 'summary_txt', null)
+    expect(url).not.toContain('lang_pair')
+  })
 })
 
 describe('initChunkedUpload', () => {
