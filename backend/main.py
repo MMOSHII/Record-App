@@ -1685,7 +1685,7 @@ async def download(folder_name: str, file_type: FileType, google_token: str, lan
     if lang_pair:
         # Validate lang_pair: only allow alphanumeric characters and underscores
         # (matches the output of _language_token, e.g. "indonesian_to_english")
-        if not all(c.isalnum() or c == "_" for c in lang_pair) or not lang_pair:
+        if not all(c.isalnum() or c == "_" for c in lang_pair):
             raise HTTPException(status_code=400, detail="Invalid lang_pair value.")
         translations = manifest.get("translations", {})
         if lang_pair not in translations:
