@@ -593,36 +593,39 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div class="space-y-1.5">
                 <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">Source Language</label>
-                <input
-                  v-model="translateForm.sourceLang"
-                  type="text"
-                  placeholder="e.g. Indonesian"
-                  class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                />
+                <div class="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700">
+                  <svg class="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                  <span v-if="detectedSourceLang" class="font-semibold text-slate-800">{{ detectedSourceLang }}</span>
+                  <span v-else class="text-slate-400 italic">Auto-detecting…</span>
+                </div>
               </div>
               <div class="space-y-1.5">
                 <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">Target Language</label>
-                <select
-                  v-model="translateForm.targetLang"
-                  class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                >
-                  <option value="">Select language…</option>
-                  <option v-for="lang in TRANSLATE_LANGUAGES" :key="lang.code" :value="lang.code">{{ lang.label }}</option>
-                </select>
-              </div>
-            </div>
-            <div class="space-y-1.5">
-              <span class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">Files to Translate</span>
-              <div class="flex flex-wrap gap-3 mt-1">
-                <label v-for="opt in TRANSLATE_FILE_OPTIONS" :key="opt.value" class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer hover:text-slate-900 transition">
+                <div class="relative">
                   <input
-                    type="checkbox"
-                    :value="opt.value"
-                    v-model="translateForm.files"
-                    class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                    v-model="translateLangSearch"
+                    @focus="translateLangDropdownOpen = true"
+                    @blur="onTargetLangBlur"
+                    type="text"
+                    :placeholder="translateForm.targetLang ? '' : 'Search language…'"
+                    autocomplete="off"
+                    class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
                   />
-                  {{ opt.label }}
-                </label>
+                  <div
+                    v-if="translateLangDropdownOpen && filteredTargetLanguages.length"
+                    class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-52 overflow-y-auto"
+                  >
+                    <div
+                      v-for="lang in filteredTargetLanguages"
+                      :key="lang.code"
+                      @mousedown.prevent="selectTargetLang(lang)"
+                      :class="translateForm.targetLang === lang.code ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-700 hover:bg-slate-50'"
+                      class="px-3 py-2 text-sm cursor-pointer"
+                    >
+                      {{ lang.label }}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             <div v-if="translateError" class="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
@@ -635,7 +638,7 @@
             </div>
             <button
               @click="runTranslateDetail"
-              :disabled="translateLoading || !translateForm.targetLang || !translateForm.sourceLang || !translateForm.files.length"
+              :disabled="translateLoading || !translateForm.targetLang || !detectedSourceLang"
               class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold px-4 py-2.5 rounded-xl transition shadow-sm"
             >
               <svg v-if="translateLoading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -690,23 +693,131 @@ const route = useRoute()
 const store = useAppStore()
 
 const TRANSLATE_LANGUAGES = [
-  { code: 'English', label: 'English' },
-  { code: 'Indonesian', label: 'Indonesian' },
-  { code: 'Spanish', label: 'Spanish' },
-  { code: 'French', label: 'French' },
-  { code: 'German', label: 'German' },
+  { code: 'Acehnese', label: 'Acehnese' },
+  { code: 'Afrikaans', label: 'Afrikaans' },
+  { code: 'Albanian', label: 'Albanian' },
+  { code: 'Amharic', label: 'Amharic' },
   { code: 'Arabic', label: 'Arabic' },
-  { code: 'Japanese', label: 'Japanese' },
+  { code: 'Armenian', label: 'Armenian' },
+  { code: 'Assamese', label: 'Assamese' },
+  { code: 'Azerbaijani', label: 'Azerbaijani' },
+  { code: 'Bambara', label: 'Bambara' },
+  { code: 'Bashkir', label: 'Bashkir' },
+  { code: 'Basque', label: 'Basque' },
+  { code: 'Belarusian', label: 'Belarusian' },
+  { code: 'Bengali', label: 'Bengali' },
+  { code: 'Bosnian', label: 'Bosnian' },
+  { code: 'Bulgarian', label: 'Bulgarian' },
+  { code: 'Burmese', label: 'Burmese' },
+  { code: 'Catalan', label: 'Catalan' },
+  { code: 'Cebuano', label: 'Cebuano' },
   { code: 'Chinese', label: 'Chinese (Simplified)' },
+  { code: 'Croatian', label: 'Croatian' },
+  { code: 'Czech', label: 'Czech' },
+  { code: 'Danish', label: 'Danish' },
+  { code: 'Dutch', label: 'Dutch' },
+  { code: 'English', label: 'English' },
+  { code: 'Estonian', label: 'Estonian' },
+  { code: 'Finnish', label: 'Finnish' },
+  { code: 'French', label: 'French' },
+  { code: 'Galician', label: 'Galician' },
+  { code: 'Georgian', label: 'Georgian' },
+  { code: 'German', label: 'German' },
+  { code: 'Greek', label: 'Greek' },
+  { code: 'Gujarati', label: 'Gujarati' },
+  { code: 'Hausa', label: 'Hausa' },
+  { code: 'Hebrew', label: 'Hebrew' },
+  { code: 'Hindi', label: 'Hindi' },
+  { code: 'Hungarian', label: 'Hungarian' },
+  { code: 'Icelandic', label: 'Icelandic' },
+  { code: 'Igbo', label: 'Igbo' },
+  { code: 'Indonesian', label: 'Indonesian' },
+  { code: 'Irish', label: 'Irish' },
+  { code: 'Italian', label: 'Italian' },
+  { code: 'Japanese', label: 'Japanese' },
+  { code: 'Javanese', label: 'Javanese' },
+  { code: 'Kannada', label: 'Kannada' },
+  { code: 'Kazakh', label: 'Kazakh' },
+  { code: 'Khmer', label: 'Khmer' },
   { code: 'Korean', label: 'Korean' },
-  { code: 'Portuguese', label: 'Portuguese' }
+  { code: 'Kurdish', label: 'Kurdish' },
+  { code: 'Kyrgyz', label: 'Kyrgyz' },
+  { code: 'Lao', label: 'Lao' },
+  { code: 'Latvian', label: 'Latvian' },
+  { code: 'Lingala', label: 'Lingala' },
+  { code: 'Lithuanian', label: 'Lithuanian' },
+  { code: 'Luxembourgish', label: 'Luxembourgish' },
+  { code: 'Macedonian', label: 'Macedonian' },
+  { code: 'Malagasy', label: 'Malagasy' },
+  { code: 'Malay', label: 'Malay' },
+  { code: 'Malayalam', label: 'Malayalam' },
+  { code: 'Maltese', label: 'Maltese' },
+  { code: 'Maori', label: 'Maori' },
+  { code: 'Marathi', label: 'Marathi' },
+  { code: 'Mongolian', label: 'Mongolian' },
+  { code: 'Nepali', label: 'Nepali' },
+  { code: 'Norwegian', label: 'Norwegian' },
+  { code: 'Oriya', label: 'Oriya' },
+  { code: 'Pashto', label: 'Pashto' },
+  { code: 'Persian', label: 'Persian' },
+  { code: 'Polish', label: 'Polish' },
+  { code: 'Portuguese', label: 'Portuguese' },
+  { code: 'Punjabi', label: 'Punjabi' },
+  { code: 'Romanian', label: 'Romanian' },
+  { code: 'Russian', label: 'Russian' },
+  { code: 'Serbian', label: 'Serbian' },
+  { code: 'Sindhi', label: 'Sindhi' },
+  { code: 'Sinhala', label: 'Sinhala' },
+  { code: 'Slovak', label: 'Slovak' },
+  { code: 'Slovenian', label: 'Slovenian' },
+  { code: 'Somali', label: 'Somali' },
+  { code: 'Spanish', label: 'Spanish' },
+  { code: 'Sundanese', label: 'Sundanese' },
+  { code: 'Swahili', label: 'Swahili' },
+  { code: 'Swedish', label: 'Swedish' },
+  { code: 'Tagalog', label: 'Tagalog' },
+  { code: 'Tajik', label: 'Tajik' },
+  { code: 'Tamil', label: 'Tamil' },
+  { code: 'Telugu', label: 'Telugu' },
+  { code: 'Thai', label: 'Thai' },
+  { code: 'Tibetan', label: 'Tibetan' },
+  { code: 'Turkish', label: 'Turkish' },
+  { code: 'Turkmen', label: 'Turkmen' },
+  { code: 'Ukrainian', label: 'Ukrainian' },
+  { code: 'Urdu', label: 'Urdu' },
+  { code: 'Uzbek', label: 'Uzbek' },
+  { code: 'Vietnamese', label: 'Vietnamese' },
+  { code: 'Welsh', label: 'Welsh' },
+  { code: 'Yoruba', label: 'Yoruba' },
+  { code: 'Zulu', label: 'Zulu' }
 ]
 
-const TRANSLATE_FILE_OPTIONS = [
-  { value: 'json', label: 'Transcript JSON' },
-  { value: 'txt', label: 'Transcript TXT' },
-  { value: 'summary_txt', label: 'Summary TXT' }
-]
+// Map Whisper/ISO 639-1 language codes to full English names for source-language auto-detection
+const WHISPER_LANG_TO_NAME = {
+  af: 'Afrikaans', sq: 'Albanian', am: 'Amharic', ar: 'Arabic',
+  hy: 'Armenian', az: 'Azerbaijani', ba: 'Bashkir', eu: 'Basque',
+  be: 'Belarusian', bn: 'Bengali', bs: 'Bosnian', bg: 'Bulgarian',
+  my: 'Burmese', ca: 'Catalan', zh: 'Chinese', hr: 'Croatian',
+  cs: 'Czech', da: 'Danish', nl: 'Dutch', en: 'English',
+  et: 'Estonian', fo: 'Faroese', fi: 'Finnish', fr: 'French',
+  gl: 'Galician', ka: 'Georgian', de: 'German', el: 'Greek',
+  gu: 'Gujarati', ha: 'Hausa', he: 'Hebrew', hi: 'Hindi',
+  hu: 'Hungarian', is: 'Icelandic', id: 'Indonesian', it: 'Italian',
+  ja: 'Japanese', jv: 'Javanese', kn: 'Kannada', kk: 'Kazakh',
+  km: 'Khmer', ko: 'Korean', ky: 'Kyrgyz', lo: 'Lao',
+  lv: 'Latvian', ln: 'Lingala', lt: 'Lithuanian', mk: 'Macedonian',
+  mg: 'Malagasy', ms: 'Malay', ml: 'Malayalam', mt: 'Maltese',
+  mi: 'Maori', mr: 'Marathi', mn: 'Mongolian', ne: 'Nepali',
+  no: 'Norwegian', or: 'Oriya', ps: 'Pashto', fa: 'Persian',
+  pl: 'Polish', pt: 'Portuguese', pa: 'Punjabi', ro: 'Romanian',
+  ru: 'Russian', sr: 'Serbian', sd: 'Sindhi', si: 'Sinhala',
+  sk: 'Slovak', sl: 'Slovenian', so: 'Somali', es: 'Spanish',
+  su: 'Sundanese', sw: 'Swahili', sv: 'Swedish', tl: 'Tagalog',
+  tg: 'Tajik', ta: 'Tamil', te: 'Telugu', th: 'Thai',
+  bo: 'Tibetan', tr: 'Turkish', tk: 'Turkmen', uk: 'Ukrainian',
+  ur: 'Urdu', uz: 'Uzbek', vi: 'Vietnamese', cy: 'Welsh',
+  yo: 'Yoruba', zu: 'Zulu'
+}
 
 // --- UI Toggle State ---
 const uiState = ref({
@@ -745,10 +856,43 @@ const translateLoading = ref(false)
 const translateError = ref('')
 const translateSuccess = ref('')
 const translateForm = reactive({
-  sourceLang: '',
-  targetLang: '',
-  files: ['json', 'txt', 'summary_txt']
+  targetLang: ''
 })
+const translateLangSearch = ref('')
+const translateLangDropdownOpen = ref(false)
+
+// Compute dominant source language from transcript segments by total text length.
+// Segments without text are excluded (length 0) to avoid skewing the result.
+const detectedSourceLang = computed(() => {
+  if (!transcriptData.value.length) return ''
+  const counts = {}
+  for (const item of transcriptData.value) {
+    const len = item.text?.length || 0
+    if (!len) continue
+    const code = getLang(item)
+    const name = WHISPER_LANG_TO_NAME[code] || code
+    counts[name] = (counts[name] || 0) + len
+  }
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1])
+  return sorted[0]?.[0] || ''
+})
+
+const filteredTargetLanguages = computed(() => {
+  const q = translateLangSearch.value.toLowerCase().trim()
+  if (!q) return TRANSLATE_LANGUAGES
+  return TRANSLATE_LANGUAGES.filter(l => l.label.toLowerCase().includes(q))
+})
+
+const selectTargetLang = (lang) => {
+  translateForm.targetLang = lang.code
+  translateLangSearch.value = lang.label
+  translateLangDropdownOpen.value = false
+}
+
+const onTargetLangBlur = () => {
+  // Delay closing so a mousedown on an option is registered before the list disappears
+  setTimeout(() => { translateLangDropdownOpen.value = false }, 200)
+}
 
 // --- Flashcard state ---
 const flashcardsLoading = ref(false)
@@ -1194,8 +1338,8 @@ const runVisualizeDetail = async () => {
 }
 
 const runTranslateDetail = async () => {
-  if (!fileName.value || !translateForm.sourceLang || !translateForm.targetLang || !translateForm.files.length) {
-    translateError.value = 'Please fill in all required fields before translating.'
+  if (!fileName.value || !detectedSourceLang.value || !translateForm.targetLang) {
+    translateError.value = 'Please select a target language before translating.'
     return
   }
   translateLoading.value = true
@@ -1205,9 +1349,8 @@ const runTranslateDetail = async () => {
     const result = await translateJob(
       folderName.value,
       fileName.value,
-      translateForm.sourceLang,
-      translateForm.targetLang,
-      translateForm.files
+      detectedSourceLang.value,
+      translateForm.targetLang
     )
     const fileCount = Object.keys(result.files || {}).length
     translateSuccess.value = `Translation to ${result.target_language} complete — ${fileCount} file(s) generated.`
@@ -1219,7 +1362,8 @@ const runTranslateDetail = async () => {
   }
 }
 
-const downloadUrl = (fileType) => getDownloadUrl(folderName.value, fileType, selectedLangPair.value)
+// Audio is never translated, so always serve the original audio file regardless of the selected lang pair.
+const downloadUrl = (fileType) => getDownloadUrl(folderName.value, fileType, fileType === 'audio' ? null : selectedLangPair.value)
 
 const switchToTranslation = async (langPair) => {
   selectedLangPair.value = langPair
