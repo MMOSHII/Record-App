@@ -1,12 +1,12 @@
 <template>
-  <div class="space-y-6 pb-8 min-h-screen">
+  <div class="min-h-screen pb-10 space-y-4">
 
-    <!-- ───────────────────────── Hero Header Card ───────────────────────── -->
-    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-      <!-- Back navigation -->
+    <!-- ──────────────── Header Card ──────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+      <!-- Back nav -->
       <router-link
         to="/history"
-        class="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-semibold transition group"
+        class="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 font-semibold transition group mb-4"
       >
         <svg class="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
@@ -14,10 +14,10 @@
         Back to History
       </router-link>
 
-      <!-- Title + status row -->
-      <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mt-4">
-        <div class="min-w-0">
-          <h1 class="text-xl font-extrabold text-slate-900 break-all font-mono">{{ folderName }}</h1>
+      <div class="flex flex-col md:flex-row md:items-start gap-4">
+        <!-- Title + metadata -->
+        <div class="flex-1 min-w-0">
+          <h1 class="text-xl font-extrabold text-slate-900 break-all font-mono leading-snug">{{ folderName }}</h1>
           <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
             <span v-if="manifest?.file_name" class="flex items-center gap-1 text-xs text-slate-500">
               <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -36,23 +36,84 @@
             </span>
           </div>
         </div>
-        <!-- Pipeline status strip -->
-        <div v-if="manifest?.status" class="flex flex-wrap gap-2 flex-shrink-0">
-          <div v-for="(step, key) in { Transcribe: manifest.status.transcribe, Summarize: manifest.status.summarize, Visualize: manifest.status.visualize, Translate: manifest.status.translate }" :key="key" class="flex flex-col items-center gap-1">
-            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{{ key }}</span>
-            <span class="px-2.5 py-0.5 rounded-lg text-xs font-bold" :class="statusClass(step)">
-              {{ String(step || '—').toUpperCase() }}
-            </span>
+
+        <!-- Status + Quick re-run actions -->
+        <div class="flex flex-col gap-3 flex-shrink-0">
+          <!-- Pipeline status -->
+          <div v-if="manifest?.status" class="flex flex-wrap gap-x-3 gap-y-1">
+            <div v-for="(step, key) in { Transcribe: manifest.status.transcribe, Summarize: manifest.status.summarize, Visualize: manifest.status.visualize, Translate: manifest.status.translate }" :key="key" class="flex items-center gap-1.5">
+              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{{ key }}</span>
+              <span class="px-2 py-0.5 rounded-lg text-[10px] font-bold" :class="statusClass(step)">
+                {{ String(step || '—').toUpperCase() }}
+              </span>
+            </div>
+          </div>
+          <!-- Re-run quick buttons -->
+          <div v-if="canSummarize || canVisualize" class="flex flex-wrap gap-2">
+            <button
+              v-if="canSummarize"
+              @click="runSummarizeDetail"
+              :disabled="actionLoading.summarize"
+              class="inline-flex items-center gap-1.5 text-xs bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold px-3 py-1.5 rounded-lg transition shadow-sm"
+            >
+              <svg v-if="actionLoading.summarize" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              {{ actionLoading.summarize ? 'Summarizing…' : 'Summarize' }}
+            </button>
+            <button
+              v-if="canVisualize"
+              @click="runVisualizeDetail"
+              :disabled="actionLoading.visualize"
+              class="inline-flex items-center gap-1.5 text-xs bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold px-3 py-1.5 rounded-lg transition shadow-sm"
+            >
+              <svg v-if="actionLoading.visualize" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
+              {{ actionLoading.visualize ? 'Visualizing…' : 'Visualize' }}
+            </button>
           </div>
         </div>
       </div>
+
+      <!-- Language switcher (integrated in header) -->
+      <div v-if="!loading && availableTranslations.length > 0" class="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-slate-100">
+        <span class="text-xs font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1.5 flex-shrink-0">
+          <svg class="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/>
+          </svg>
+          Language:
+        </span>
+        <button
+          @click="switchToTranslation(null)"
+          :class="selectedLangPair === null ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+          class="text-xs font-semibold px-3 py-1 rounded-lg transition"
+        >Original</button>
+        <button
+          v-for="lp in availableTranslations"
+          :key="lp"
+          @click="switchToTranslation(lp)"
+          :class="selectedLangPair === lp ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+          class="text-xs font-semibold px-3 py-1 rounded-lg transition"
+        >{{ langPairLabel(lp) }}</button>
+        <svg v-if="viewLoading" class="w-3.5 h-3.5 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+        <p v-if="viewError" class="w-full text-xs text-red-600 font-semibold mt-1">{{ viewError }}</p>
+      </div>
+
+      <!-- Action feedback (inline in header) -->
+      <div v-if="actionError" class="mt-3 bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
+        <svg class="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        <p class="text-xs text-red-700 font-semibold">{{ actionError }}</p>
+      </div>
+      <div v-if="actionSuccess" class="mt-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2">
+        <svg class="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+        <p class="text-xs text-emerald-700 font-semibold">{{ actionSuccess }}</p>
+      </div>
     </div>
 
-    <!-- ───────────────────────── Error Banner ───────────────────────── -->
-    <div
-      v-if="error"
-      class="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3"
-    >
+    <!-- ──────────────── Error Banner ──────────────── -->
+    <div v-if="error" class="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
       <span class="text-red-500 flex-shrink-0 mt-0.5">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
@@ -61,533 +122,476 @@
       <p class="text-sm font-semibold text-red-700">{{ error }}</p>
     </div>
 
-    <!-- ───────────────────────── Language Switcher ───────────────────────── -->
-    <div v-if="!loading && availableTranslations.length > 0" class="bg-white rounded-2xl shadow-sm border border-slate-200 px-6 py-4">
-      <div class="flex flex-wrap items-center gap-3">
-        <div class="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wide flex-shrink-0">
-          <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/>
-          </svg>
-          View in:
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <button
-            @click="switchToTranslation(null)"
-            :class="selectedLangPair === null
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
-            class="text-xs font-semibold px-3 py-1.5 rounded-lg transition"
-          >
-            Original
-          </button>
-          <button
-            v-for="lp in availableTranslations"
-            :key="lp"
-            @click="switchToTranslation(lp)"
-            :class="selectedLangPair === lp
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
-            class="text-xs font-semibold px-3 py-1.5 rounded-lg transition"
-          >
-            {{ langPairLabel(lp) }}
-          </button>
-        </div>
-        <svg v-if="viewLoading" class="w-4 h-4 animate-spin text-indigo-500 ml-1" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-        </svg>
-      </div>
-      <p v-if="viewError" class="mt-2 text-xs text-red-600 font-semibold">{{ viewError }}</p>
-    </div>
-
-    <!-- ───────────────────────── Skeleton Loading ───────────────────────── -->
+    <!-- ──────────────── Skeleton Loading ──────────────── -->
     <template v-if="loading">
-      <div v-for="n in 3" :key="n" class="bg-white rounded-2xl border border-slate-200 p-6 animate-pulse">
-        <div class="h-4 bg-slate-200 rounded w-1/4 mb-4"/>
-        <div class="space-y-2">
-          <div class="h-3 bg-slate-100 rounded w-full"/>
-          <div class="h-3 bg-slate-100 rounded w-5/6"/>
-          <div class="h-3 bg-slate-100 rounded w-4/6"/>
+      <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden animate-pulse">
+        <div class="flex gap-1 px-4 pt-4 pb-3 border-b border-slate-100">
+          <div class="h-8 bg-slate-200 rounded-lg w-24"/>
+          <div class="h-8 bg-slate-100 rounded-lg w-28"/>
+          <div class="h-8 bg-slate-100 rounded-lg w-20"/>
+          <div class="h-8 bg-slate-100 rounded-lg w-20"/>
+        </div>
+        <div class="p-6 space-y-4">
+          <div class="h-4 bg-slate-200 rounded w-1/3"/>
+          <div class="space-y-2">
+            <div class="h-3 bg-slate-100 rounded w-full"/>
+            <div class="h-3 bg-slate-100 rounded w-5/6"/>
+            <div class="h-3 bg-slate-100 rounded w-4/6"/>
+            <div class="h-3 bg-slate-100 rounded w-3/4"/>
+          </div>
+          <div class="grid grid-cols-2 gap-4 pt-2">
+            <div class="h-24 bg-slate-100 rounded-xl"/>
+            <div class="h-24 bg-slate-100 rounded-xl"/>
+          </div>
         </div>
       </div>
     </template>
 
+    <!-- ──────────────── Main Content (Tab-based) ──────────────── -->
     <template v-else-if="!error">
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
 
-      <!-- ───────────────────────── Summary Dashboard ───────────────────────── -->
-      <div v-if="detail.summary" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div @click="toggleSection('summary')" class="px-6 py-4 border-b border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <!-- Tab Navigation Bar -->
+        <nav class="flex overflow-x-auto border-b border-slate-200 px-1 pt-1 gap-1 scrollbar-hide">
+          <button
+            @click="activeTab = 'summary'"
+            :class="activeTab === 'summary'
+              ? 'text-amber-700 bg-amber-50 border-amber-400'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border-transparent'"
+            class="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 whitespace-nowrap transition-colors"
+          >
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            Summary
+          </button>
+
+          <button
+            v-if="transcriptData.length > 0 || detail.transcript"
+            @click="activeTab = 'transcript'"
+            :class="activeTab === 'transcript'
+              ? 'text-emerald-700 bg-emerald-50 border-emerald-400'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border-transparent'"
+            class="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 whitespace-nowrap transition-colors"
+          >
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+            </svg>
+            Transcript
+            <span v-if="transcriptData.length" class="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">{{ transcriptData.length }}</span>
+          </button>
+
+          <button
+            v-if="manifest?.files?.transcript_json"
+            @click="activeTab = 'ai'"
+            :class="activeTab === 'ai'
+              ? 'text-teal-700 bg-teal-50 border-teal-400'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border-transparent'"
+            class="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 whitespace-nowrap transition-colors"
+          >
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+            </svg>
+            AI Tools
+          </button>
+
+          <button
+            @click="activeTab = 'actions'"
+            :class="activeTab === 'actions'
+              ? 'text-indigo-700 bg-indigo-50 border-indigo-400'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border-transparent'"
+            class="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 whitespace-nowrap transition-colors"
+          >
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            Actions
+          </button>
+        </nav>
+
+        <!-- ── Tab Panel: Summary ── -->
+        <div v-if="activeTab === 'summary'" class="p-6">
+          <div v-if="detail.summary" class="space-y-6">
+            <!-- Download row -->
+            <div class="flex items-center justify-between">
+              <h2 class="text-sm font-bold text-slate-700 flex items-center gap-2">
+                <span class="w-6 h-6 rounded-md bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <svg class="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                </span>
+                Summary
+              </h2>
+              <div class="flex gap-2">
+                <a :href="downloadUrl('summary_txt')" download class="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                  TXT
+                </a>
+                <a :href="downloadUrl('summary_html')" download class="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                  HTML
+                </a>
+              </div>
+            </div>
+            <!-- Structured summary -->
+            <div v-if="parsedSummary" class="space-y-6">
+              <div class="bg-indigo-50/60 border-l-4 border-indigo-500 rounded-r-xl p-4">
+                <h3 class="text-xs font-bold text-indigo-800 uppercase tracking-wider mb-2">Ringkasan Singkat</h3>
+                <p class="text-sm text-slate-700 leading-relaxed">{{ parsedSummary.ringkasan_singkat }}</p>
+              </div>
+              <div>
+                <h3 class="text-sm font-bold text-slate-800 mb-2">Topik Utama</h3>
+                <p class="text-sm text-slate-600 mb-3">{{ parsedSummary.topik_utama }}</p>
+                <div class="flex flex-wrap gap-2">
+                  <span v-for="(tema, index) in parsedSummary.tema_besar" :key="index" class="bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium px-3 py-1 rounded-full">
+                    {{ tema }}
+                  </span>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                <div>
+                  <h3 class="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <span class="w-5 h-5 rounded-md bg-amber-100 flex items-center justify-center text-amber-600 text-xs">💡</span>
+                    Insight Penting
+                  </h3>
+                  <ul class="space-y-2">
+                    <li v-for="(insight, index) in parsedSummary.insight" :key="index" class="flex items-start gap-2 text-sm text-slate-600">
+                      <span class="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0 mt-2"/>
+                      <span class="leading-relaxed">{{ insight }}</span>
+                    </li>
+                  </ul>
+                </div>
+                <div>
+                  <h3 class="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <span class="w-5 h-5 rounded-md bg-emerald-100 flex items-center justify-center text-emerald-600">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                    </span>
+                    Rekomendasi
+                  </h3>
+                  <ul class="space-y-2">
+                    <li v-for="(rek, index) in parsedSummary.rekomendasi" :key="index" class="flex items-start gap-2 text-sm text-slate-600">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0 mt-2"/>
+                      <span class="leading-relaxed">{{ rek }}</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <!-- Raw summary fallback -->
+            <div v-else class="bg-slate-50 rounded-xl p-4 text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+              {{ detail.summary }}
+            </div>
+          </div>
+          <!-- Empty state with CTA -->
+          <div v-else class="flex flex-col items-center justify-center py-12 text-center">
+            <div class="w-14 h-14 rounded-2xl bg-amber-100 flex items-center justify-center mb-4">
+              <svg class="w-7 h-7 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
               </svg>
             </div>
-            <h2 class="text-sm font-bold text-slate-800">Summary Dashboard</h2>
-          </div>
-          <div class="flex items-center gap-3" @click.stop>
-            <a :href="downloadUrl('summary_txt')" download class="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-              TXT
-            </a>
-            <a :href="downloadUrl('summary_html')" download class="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-              HTML
-            </a>
-            <svg :class="{'rotate-180': uiState.summary}" class="w-4 h-4 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-          </div>
-        </div>
-
-        <div v-show="uiState.summary" class="p-6 space-y-6">
-          <div v-if="parsedSummary" class="space-y-6">
-            <div class="bg-indigo-50/60 border-l-4 border-indigo-500 rounded-r-xl p-4">
-              <h3 class="text-xs font-bold text-indigo-800 uppercase tracking-wider mb-2">Ringkasan Singkat</h3>
-              <p class="text-sm text-slate-700 leading-relaxed">{{ parsedSummary.ringkasan_singkat }}</p>
-            </div>
-            <div>
-              <h3 class="text-sm font-bold text-slate-800 mb-2">Topik Utama</h3>
-              <p class="text-sm text-slate-600 mb-3">{{ parsedSummary.topik_utama }}</p>
-              <div class="flex flex-wrap gap-2">
-                <span v-for="(tema, index) in parsedSummary.tema_besar" :key="index" class="bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium px-3 py-1 rounded-full">
-                  {{ tema }}
-                </span>
-              </div>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
-              <div>
-                <h3 class="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                  <span class="w-5 h-5 rounded-md bg-amber-100 flex items-center justify-center text-amber-600 text-xs">💡</span>
-                  Insight Penting
-                </h3>
-                <ul class="space-y-2">
-                  <li v-for="(insight, index) in parsedSummary.insight" :key="index" class="flex items-start gap-2 text-sm text-slate-600">
-                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0 mt-2"/>
-                    <span class="leading-relaxed">{{ insight }}</span>
-                  </li>
-                </ul>
-              </div>
-              <div>
-                <h3 class="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                  <span class="w-5 h-5 rounded-md bg-emerald-100 flex items-center justify-center text-emerald-600">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
-                  </span>
-                  Rekomendasi
-                </h3>
-                <ul class="space-y-2">
-                  <li v-for="(rek, index) in parsedSummary.rekomendasi" :key="index" class="flex items-start gap-2 text-sm text-slate-600">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0 mt-2"/>
-                    <span class="leading-relaxed">{{ rek }}</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-          <div v-else class="bg-slate-50 rounded-xl p-4 text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
-            {{ detail.summary }}
-          </div>
-        </div>
-      </div>
-
-      <!-- ───────────────────────── Interactive Transcript Editor ───────────────────────── -->
-      <div v-if="transcriptData.length > 0" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div @click="toggleSection('editor')" class="px-6 py-4 border-b border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-              </svg>
-            </div>
-            <h2 class="text-sm font-bold text-slate-800">Interactive Transcript Editor</h2>
-          </div>
-          <div class="flex items-center gap-3" @click.stop>
-            <button @click.stop="downloadEditedJSON" class="inline-flex items-center gap-1.5 text-xs bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-lg font-semibold transition">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-              Export JSON
-            </button>
-            <svg :class="{'rotate-180': uiState.editor}" class="w-4 h-4 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-          </div>
-        </div>
-
-        <div v-show="uiState.editor" class="p-6">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-8 pb-6 border-b border-slate-200 mb-6">
-            <div class="md:col-span-2">
-              <span class="font-semibold text-sm text-slate-700 mb-3 block">Pengaturan Pembicara:</span>
-              <div class="flex flex-wrap gap-3">
-                <div v-for="(setting, id) in speakerSettings" :key="id" class="flex items-center bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm gap-2 hover:border-slate-300 transition">
-                  <input type="checkbox" v-model="setting.visible" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer" title="Sembunyikan/Tampilkan">
-                  <input type="text" v-model="setting.name" class="border border-slate-300 rounded px-2 py-1 w-24 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500" title="Ganti Nama">
-                  <input type="color" v-model="setting.color" class="border-0 w-8 h-8 rounded cursor-pointer bg-transparent" title="Ganti Warna">
-                  <button @click="deleteSpeaker(Number(id))" class="ml-1 p-1 text-red-500 hover:bg-red-50 rounded transition" title="Hapus Speaker Ini">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div>
-              <span class="font-semibold text-sm text-slate-700 mb-3 block">Filter Bahasa:</span>
-              <div class="flex flex-wrap gap-2">
-                <label v-for="lang in availableLanguages" :key="lang" class="flex items-center bg-slate-100 px-4 py-1.5 rounded-full cursor-pointer hover:bg-slate-200 transition text-xs font-bold text-slate-600 gap-2 border border-slate-200">
-                  <input type="checkbox" :checked="activeLanguages.includes(lang)" @change="toggleLanguage(lang)" class="w-3.5 h-3.5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">
-                  <span>{{ lang.toUpperCase() }}</span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div class="mb-8">
-            <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Visualisasi Timeline</h3>
-            <div class="flex flex-col gap-3">
-              <div v-if="filteredTranscript.length === 0" class="text-sm text-slate-400 italic">Data kosong atau semua filter disembunyikan.</div>
-              <template v-for="(setting, id) in speakerSettings" :key="id">
-                <div v-show="setting.visible" class="flex items-center">
-                  <div class="w-28 text-xs font-semibold text-slate-700 truncate pr-2" :title="setting.name">{{ setting.name }}</div>
-                  <div class="flex-grow h-6 bg-slate-100 border border-slate-200 relative rounded-md overflow-hidden">
-                    <div v-for="seg in getSegmentsForSpeaker(id)" :key="seg._id"
-                         class="segment"
-                         :style="{ left: (seg.start / maxTime) * 100 + '%', width: ((seg.end - seg.start) / maxTime) * 100 + '%', background: setting.color }"
-                         :title="seg.text">
-                    </div>
-                  </div>
-                </div>
-              </template>
-            </div>
-          </div>
-
-          <div>
-            <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Transkrip Percakapan</h3>
-            <div class="flex flex-col space-y-4 max-h-[600px] overflow-y-auto pr-2 pb-4">
-              <div v-if="filteredTranscript.length === 0" class="text-sm text-slate-400 italic text-center py-4">Data kosong.</div>
-              <div v-for="item in filteredTranscript" :key="item._id"
-                   class="chat-bubble relative p-4 rounded-xl max-w-[85%] md:max-w-[80%] border-l-[6px] shadow-sm transition-all duration-200"
-                   :class="{'ml-auto': item.speaker % 2 !== 0}"
-                   :style="{ backgroundColor: hexToRgba(speakerSettings[item.speaker]?.color || '#000', 0.08), borderLeftColor: speakerSettings[item.speaker]?.color || '#000' }">
-                <div class="flex flex-wrap items-center gap-2 mb-2 text-xs font-bold" :style="{ color: speakerSettings[item.speaker]?.color }">
-                  <span>{{ speakerSettings[item.speaker]?.name }}</span>
-                  <span class="text-slate-400 font-normal">•</span>
-                  <span>{{ item.start }}s - {{ item.end }}s</span>
-                  <span class="bg-black/5 text-slate-600 px-2 py-0.5 rounded ml-1">{{ getLang(item).toUpperCase() }}</span>
-                  <button @click="deleteSegment(item._id)" class="btn-delete-segment ml-auto flex items-center gap-1 bg-red-100 text-red-600 hover:bg-red-200 px-2 py-1 rounded text-[10px]">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                    Hapus
-                  </button>
-                </div>
-                <div class="p-1.5 border border-transparent border-dashed rounded transition-colors text-sm text-slate-800 leading-relaxed hover:border-slate-300 hover:bg-white/40 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-200 cursor-text"
-                     contenteditable="true"
-                     @blur="handleTextEdit(item._id, $event.target.innerText)">
-                  {{ item.text }}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ───────────────────────── Raw Transcript ───────────────────────── -->
-      <div v-if="detail.transcript" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div @click="toggleSection('raw')" class="px-6 py-4 border-b border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h12"/>
-              </svg>
-            </div>
-            <h2 class="text-sm font-bold text-slate-800">Transcript <span class="font-normal text-slate-400">(Raw TXT)</span></h2>
-          </div>
-          <div class="flex items-center gap-3" @click.stop>
-            <a :href="downloadUrl('transcript_txt')" download class="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-              TXT
-            </a>
-            <svg :class="{'rotate-180': uiState.raw}" class="w-4 h-4 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-          </div>
-        </div>
-        <div v-show="uiState.raw" class="p-6">
-          <div class="bg-slate-50 rounded-xl p-4 text-xs text-slate-600 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto font-mono">
-            {{ detail.transcript }}
-          </div>
-        </div>
-      </div>
-
-      <!-- ───────────────────────── Audio Player ───────────────────────── -->
-      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div @click="toggleSection('audio')" class="px-6 py-4 border-b border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M12 9.5v5m-3.536-6.036a5 5 0 000 7.072M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/>
-              </svg>
-            </div>
-            <h2 class="text-sm font-bold text-slate-800">Audio Source</h2>
-          </div>
-          <svg :class="{'rotate-180': uiState.audio}" class="w-4 h-4 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </div>
-        <div v-show="uiState.audio" class="p-6">
-          <audio controls class="w-full rounded-xl" :src="downloadUrl('audio')" />
-        </div>
-      </div>
-
-      <!-- ───────────────────────── Speaker Timeline Image ───────────────────────── -->
-      <div v-if="manifest && manifest.files && manifest.files.timeline_png" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div @click="toggleSection('visualization')" class="px-6 py-4 border-b border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/>
-              </svg>
-            </div>
-            <h2 class="text-sm font-bold text-slate-800">Speaker Timeline</h2>
-          </div>
-          <div class="flex items-center gap-3" @click.stop>
-            <a :href="downloadUrl('image')" download class="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-              PNG
-            </a>
-            <svg :class="{'rotate-180': uiState.visualization}" class="w-4 h-4 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-          </div>
-        </div>
-        <div v-show="uiState.visualization" class="p-6">
-          <img
-            :src="downloadUrl('image')"
-            class="w-full rounded-xl border border-slate-200"
-            alt="Speaker timeline visualization"
-            @error="$event.target.style.display = 'none'"
-          />
-        </div>
-      </div>
-
-      <!-- ───────────────────────── Flashcards ───────────────────────── -->
-      <div v-if="manifest && manifest.files && manifest.files.transcript_json" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div @click="toggleSection('flashcards')" class="px-6 py-4 border-b border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-yellow-100 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-              </svg>
-            </div>
-            <h2 class="text-sm font-bold text-slate-800">Flashcards</h2>
-            <span v-if="flashcards.length" class="text-xs bg-yellow-100 text-yellow-700 font-bold px-2 py-0.5 rounded-full">{{ flashcards.length }}</span>
-          </div>
-          <svg :class="{'rotate-180': uiState.flashcards}" class="w-4 h-4 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </div>
-        <div v-show="uiState.flashcards" class="p-6 space-y-5">
-          <!-- Generate controls -->
-          <div class="flex flex-wrap items-center gap-3">
-            <div class="flex items-center gap-2">
-              <label class="text-xs font-semibold text-slate-600 uppercase tracking-wide whitespace-nowrap">Cards</label>
-              <input
-                v-model.number="flashcardCount"
-                type="number"
-                min="1"
-                max="100"
-                class="w-20 border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition"
-              />
-            </div>
+            <p class="text-sm font-semibold text-slate-600 mb-1">No summary yet</p>
+            <p class="text-xs text-slate-400 mb-5">Run the summarize step to generate an AI summary of this recording.</p>
             <button
-              @click="runGenerateFlashcards"
-              :disabled="flashcardsLoading"
-              class="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-xl transition shadow-sm"
+              v-if="fileName"
+              @click="runSummarizeDetail"
+              :disabled="actionLoading.summarize"
+              class="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition shadow-sm"
             >
-              <svg v-if="flashcardsLoading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-              {{ flashcardsLoading ? 'Generating…' : 'Generate' }}
+              <svg v-if="actionLoading.summarize" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              {{ actionLoading.summarize ? 'Summarizing…' : 'Generate Summary' }}
             </button>
           </div>
-          <!-- Error -->
-          <div v-if="flashcardsError" class="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
-            <svg class="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-            <p class="text-xs text-red-700 font-semibold">{{ flashcardsError }}</p>
-          </div>
-          <!-- Card viewer -->
-          <div v-if="flashcards.length" class="space-y-4">
-            <!-- Flip card -->
-            <div
-              class="relative cursor-pointer select-none"
-              style="perspective: 1000px;"
-              @click="cardFlipped = !cardFlipped"
-            >
-              <div
-                class="relative w-full transition-transform duration-500"
-                :style="{ transformStyle: 'preserve-3d', transform: cardFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }"
+        </div>
+
+        <!-- ── Tab Panel: Transcript ── -->
+        <div v-if="activeTab === 'transcript'">
+          <!-- Sub-tab bar -->
+          <div class="flex items-center gap-1 px-4 py-2 bg-slate-50 border-b border-slate-200">
+            <button
+              v-if="transcriptData.length > 0"
+              @click="activeTranscriptTab = 'editor'"
+              :class="activeTranscriptTab === 'editor' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'"
+              class="text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+            >Interactive Editor</button>
+            <button
+              v-if="detail.transcript"
+              @click="activeTranscriptTab = 'raw'"
+              :class="activeTranscriptTab === 'raw' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'"
+              class="text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+            >Raw Text</button>
+            <!-- Toolbar downloads -->
+            <div class="ml-auto flex gap-2 items-center">
+              <button
+                v-if="transcriptData.length > 0"
+                @click="downloadEditedJSON"
+                class="inline-flex items-center gap-1.5 text-xs bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-lg font-semibold transition"
               >
-                <!-- Front -->
-                <div class="w-full bg-yellow-50 border border-yellow-200 rounded-2xl p-6 min-h-[120px] flex flex-col justify-between" style="backface-visibility: hidden;">
-                  <div>
-                    <div class="flex items-center justify-between mb-3">
-                      <span class="text-[10px] font-bold text-yellow-600 uppercase tracking-widest">Question</span>
-                      <span v-if="currentCard?.timestamp" class="text-[10px] text-slate-400 font-mono">{{ currentCard.timestamp }}</span>
-                    </div>
-                    <p class="text-sm font-semibold text-slate-800 leading-relaxed">{{ currentCard?.front }}</p>
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                Export JSON
+              </button>
+              <a v-if="detail.transcript" :href="downloadUrl('transcript_txt')" download class="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                TXT
+              </a>
+            </div>
+          </div>
+
+          <!-- Interactive Editor -->
+          <div v-if="activeTranscriptTab === 'editor' && transcriptData.length > 0" class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 pb-6 border-b border-slate-200 mb-6">
+              <div class="md:col-span-2">
+                <span class="font-semibold text-sm text-slate-700 mb-3 block">Pengaturan Pembicara:</span>
+                <div class="flex flex-wrap gap-3">
+                  <div v-for="(setting, id) in speakerSettings" :key="id" class="flex items-center bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-sm gap-2 hover:border-slate-300 transition">
+                    <input type="checkbox" v-model="setting.visible" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer" title="Sembunyikan/Tampilkan">
+                    <input type="text" v-model="setting.name" class="border border-slate-300 rounded px-2 py-1 w-24 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500" title="Ganti Nama">
+                    <input type="color" v-model="setting.color" class="border-0 w-8 h-8 rounded cursor-pointer bg-transparent" title="Ganti Warna">
+                    <button @click="deleteSpeaker(Number(id))" class="ml-1 p-1 text-red-500 hover:bg-red-50 rounded transition" title="Hapus Speaker Ini">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
                   </div>
-                  <p class="text-xs text-slate-400 mt-3 text-right">Click to reveal answer ↓</p>
                 </div>
-                <!-- Back -->
-                <div
-                  class="absolute inset-0 bg-indigo-50 border border-indigo-200 rounded-2xl p-6 min-h-[120px] flex flex-col justify-between"
-                  style="backface-visibility: hidden; transform: rotateY(180deg);"
+              </div>
+              <div>
+                <span class="font-semibold text-sm text-slate-700 mb-3 block">Filter Bahasa:</span>
+                <div class="flex flex-wrap gap-2">
+                  <label v-for="lang in availableLanguages" :key="lang" class="flex items-center bg-slate-100 px-4 py-1.5 rounded-full cursor-pointer hover:bg-slate-200 transition text-xs font-bold text-slate-600 gap-2 border border-slate-200">
+                    <input type="checkbox" :checked="activeLanguages.includes(lang)" @change="toggleLanguage(lang)" class="w-3.5 h-3.5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">
+                    <span>{{ lang.toUpperCase() }}</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="mb-8">
+              <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Visualisasi Timeline</h3>
+              <div class="flex flex-col gap-3">
+                <div v-if="filteredTranscript.length === 0" class="text-sm text-slate-400 italic">Data kosong atau semua filter disembunyikan.</div>
+                <template v-for="(setting, id) in speakerSettings" :key="id">
+                  <div v-show="setting.visible" class="flex items-center">
+                    <div class="w-28 text-xs font-semibold text-slate-700 truncate pr-2" :title="setting.name">{{ setting.name }}</div>
+                    <div class="flex-grow h-6 bg-slate-100 border border-slate-200 relative rounded-md overflow-hidden">
+                      <div v-for="seg in getSegmentsForSpeaker(id)" :key="seg._id"
+                           class="segment"
+                           :style="{ left: (seg.start / maxTime) * 100 + '%', width: ((seg.end - seg.start) / maxTime) * 100 + '%', background: setting.color }"
+                           :title="seg.text">
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <div>
+              <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Transkrip Percakapan</h3>
+              <div class="flex flex-col space-y-4 max-h-[600px] overflow-y-auto pr-2 pb-4">
+                <div v-if="filteredTranscript.length === 0" class="text-sm text-slate-400 italic text-center py-4">Data kosong.</div>
+                <div v-for="item in filteredTranscript" :key="item._id"
+                     class="chat-bubble relative p-4 rounded-xl max-w-[85%] md:max-w-[80%] border-l-[6px] shadow-sm transition-all duration-200"
+                     :class="{'ml-auto': item.speaker % 2 !== 0}"
+                     :style="{ backgroundColor: hexToRgba(speakerSettings[item.speaker]?.color || '#000', 0.08), borderLeftColor: speakerSettings[item.speaker]?.color || '#000' }">
+                  <div class="flex flex-wrap items-center gap-2 mb-2 text-xs font-bold" :style="{ color: speakerSettings[item.speaker]?.color }">
+                    <span>{{ speakerSettings[item.speaker]?.name }}</span>
+                    <span class="text-slate-400 font-normal">•</span>
+                    <span>{{ item.start }}s - {{ item.end }}s</span>
+                    <span class="bg-black/5 text-slate-600 px-2 py-0.5 rounded ml-1">{{ getLang(item).toUpperCase() }}</span>
+                    <button @click="deleteSegment(item._id)" class="btn-delete-segment ml-auto flex items-center gap-1 bg-red-100 text-red-600 hover:bg-red-200 px-2 py-1 rounded text-[10px]">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                      Hapus
+                    </button>
+                  </div>
+                  <div class="p-1.5 border border-transparent border-dashed rounded transition-colors text-sm text-slate-800 leading-relaxed hover:border-slate-300 hover:bg-white/40 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-200 cursor-text"
+                       contenteditable="true"
+                       @blur="handleTextEdit(item._id, $event.target.innerText)">
+                    {{ item.text }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Raw Transcript -->
+          <div v-if="activeTranscriptTab === 'raw' && detail.transcript" class="p-6">
+            <div class="bg-slate-50 rounded-xl p-4 text-xs text-slate-600 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto font-mono">
+              {{ detail.transcript }}
+            </div>
+          </div>
+
+          <!-- Empty state if no data for chosen sub-tab -->
+          <div v-if="activeTranscriptTab === 'editor' && transcriptData.length === 0 && detail.transcript" class="p-6 text-center">
+            <p class="text-sm text-slate-400 mb-2">No interactive transcript data available.</p>
+            <button @click="activeTranscriptTab = 'raw'" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 underline">View Raw Text instead</button>
+          </div>
+        </div>
+
+        <!-- ── Tab Panel: AI Tools ── -->
+        <div v-if="activeTab === 'ai'" class="divide-y divide-slate-100">
+          <!-- Chatbot -->
+          <div class="flex flex-col" style="max-height: 520px;">
+            <div class="px-5 py-3 flex items-center gap-3 bg-teal-50/50 border-b border-slate-100">
+              <div class="w-7 h-7 rounded-lg bg-teal-100 flex items-center justify-center flex-shrink-0">
+                <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+                </svg>
+              </div>
+              <h2 class="text-sm font-bold text-slate-800">Ask the Transcript</h2>
+            </div>
+            <div ref="chatScrollRef" class="flex-1 overflow-y-auto p-5 space-y-3 min-h-[120px]">
+              <div v-if="!chatMessages.length" class="text-center py-8">
+                <svg class="w-8 h-8 text-slate-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                <p class="text-xs text-slate-400">Ask anything about this recording.</p>
+                <p class="text-xs text-slate-400 mt-1">e.g. "What topics were discussed?" or "Summarize from 00:02:00 to 00:05:00."</p>
+              </div>
+              <div v-for="(msg, i) in chatMessages" :key="i" class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
+                <div class="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm"
+                     :class="msg.role === 'user' ? 'bg-indigo-600 text-white rounded-br-sm' : 'bg-slate-100 text-slate-800 rounded-bl-sm'">
+                  <p class="whitespace-pre-wrap break-words">{{ msg.content }}</p>
+                </div>
+              </div>
+              <div v-if="chatLoading" class="flex justify-start">
+                <div class="bg-slate-100 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay:0ms"></span>
+                  <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay:150ms"></span>
+                  <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay:300ms"></span>
+                </div>
+              </div>
+            </div>
+            <div v-if="chatError" class="mx-5 mb-2">
+              <div class="bg-red-50 border border-red-200 rounded-xl p-2.5 flex items-start gap-2">
+                <svg class="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                <p class="text-xs text-red-700 font-semibold">{{ chatError }}</p>
+              </div>
+            </div>
+            <div class="border-t border-slate-200 p-4 flex items-end gap-3">
+              <textarea
+                v-model="chatInput"
+                @keydown="handleChatKeydown"
+                placeholder="Ask a question about the transcript… (Enter to send)"
+                rows="2"
+                :disabled="chatLoading"
+                class="flex-1 resize-none border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition disabled:opacity-50 leading-relaxed"
+              ></textarea>
+              <button
+                @click="sendChat"
+                :disabled="chatLoading || !chatInput.trim()"
+                class="flex-shrink-0 flex items-center justify-center w-10 h-10 bg-teal-600 hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition shadow-sm"
+                aria-label="Send message"
+              >
+                <svg v-if="chatLoading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Flashcards -->
+          <div class="p-5 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-yellow-100 flex items-center justify-center flex-shrink-0">
+                  <svg class="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                  </svg>
+                </div>
+                <h2 class="text-sm font-bold text-slate-800">Flashcards</h2>
+                <span v-if="flashcards.length" class="text-xs bg-yellow-100 text-yellow-700 font-bold px-2 py-0.5 rounded-full">{{ flashcards.length }}</span>
+              </div>
+              <!-- Generate controls inline -->
+              <div class="flex items-center gap-2">
+                <label class="text-xs font-semibold text-slate-500 whitespace-nowrap">Cards</label>
+                <input
+                  v-model.number="flashcardCount"
+                  type="number"
+                  min="1"
+                  max="100"
+                  class="w-16 border border-slate-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition"
+                />
+                <button
+                  @click="runGenerateFlashcards"
+                  :disabled="flashcardsLoading"
+                  class="flex items-center gap-1.5 bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition shadow-sm"
                 >
-                  <div>
-                    <div class="flex items-center justify-between mb-3">
-                      <span class="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Answer</span>
-                      <span v-if="currentCard?.type" class="text-[10px] bg-indigo-100 text-indigo-600 font-bold px-2 py-0.5 rounded-full uppercase">{{ currentCard.type }}</span>
+                  <svg v-if="flashcardsLoading" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                  <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                  {{ flashcardsLoading ? 'Generating…' : 'Generate' }}
+                </button>
+              </div>
+            </div>
+            <div v-if="flashcardsError" class="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
+              <svg class="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+              <p class="text-xs text-red-700 font-semibold">{{ flashcardsError }}</p>
+            </div>
+            <div v-if="flashcards.length" class="space-y-4">
+              <!-- Flip card -->
+              <div class="relative cursor-pointer select-none" style="perspective: 1000px;" @click="cardFlipped = !cardFlipped">
+                <div class="relative w-full transition-transform duration-500" :style="{ transformStyle: 'preserve-3d', transform: cardFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }">
+                  <div class="w-full bg-yellow-50 border border-yellow-200 rounded-2xl p-6 min-h-[120px] flex flex-col justify-between" style="backface-visibility: hidden;">
+                    <div>
+                      <div class="flex items-center justify-between mb-3">
+                        <span class="text-[10px] font-bold text-yellow-600 uppercase tracking-widest">Question</span>
+                        <span v-if="currentCard?.timestamp" class="text-[10px] text-slate-400 font-mono">{{ currentCard.timestamp }}</span>
+                      </div>
+                      <p class="text-sm font-semibold text-slate-800 leading-relaxed">{{ currentCard?.front }}</p>
                     </div>
-                    <p class="text-sm text-slate-700 leading-relaxed">{{ currentCard?.back }}</p>
+                    <p class="text-xs text-slate-400 mt-3 text-right">Click to reveal answer ↓</p>
                   </div>
-                  <p class="text-xs text-slate-400 mt-3 text-right">Click to flip back ↑</p>
+                  <div class="absolute inset-0 bg-indigo-50 border border-indigo-200 rounded-2xl p-6 min-h-[120px] flex flex-col justify-between" style="backface-visibility: hidden; transform: rotateY(180deg);">
+                    <div>
+                      <div class="flex items-center justify-between mb-3">
+                        <span class="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Answer</span>
+                        <span v-if="currentCard?.type" class="text-[10px] bg-indigo-100 text-indigo-600 font-bold px-2 py-0.5 rounded-full uppercase">{{ currentCard.type }}</span>
+                      </div>
+                      <p class="text-sm text-slate-700 leading-relaxed">{{ currentCard?.back }}</p>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-3 text-right">Click to flip back ↑</p>
+                  </div>
                 </div>
               </div>
-            </div>
-            <!-- Navigation -->
-            <div class="flex items-center justify-between">
-              <button
-                @click="prevCard"
-                :disabled="currentCardIndex === 0"
-                class="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition px-3 py-1.5 rounded-lg hover:bg-indigo-50"
-              >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-                Prev
-              </button>
-              <span class="text-xs font-semibold text-slate-500">{{ currentCardIndex + 1 }} / {{ flashcards.length }}</span>
-              <button
-                @click="nextCard"
-                :disabled="currentCardIndex === flashcards.length - 1"
-                class="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition px-3 py-1.5 rounded-lg hover:bg-indigo-50"
-              >
-                Next
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ───────────────────────── Chatbot ───────────────────────── -->
-      <div v-if="manifest && manifest.files && manifest.files.transcript_json" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div @click="toggleSection('chatbot')" class="px-6 py-4 border-b border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-teal-100 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
-              </svg>
-            </div>
-            <h2 class="text-sm font-bold text-slate-800">Ask the Transcript</h2>
-          </div>
-          <svg :class="{'rotate-180': uiState.chatbot}" class="w-4 h-4 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </div>
-        <div v-show="uiState.chatbot" class="flex flex-col" style="max-height: 520px;">
-          <!-- Message list -->
-          <div ref="chatScrollRef" class="flex-1 overflow-y-auto p-5 space-y-3 min-h-[120px]">
-            <div v-if="!chatMessages.length" class="text-center py-8">
-              <svg class="w-8 h-8 text-slate-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
-              <p class="text-xs text-slate-400">Ask anything about this recording.</p>
-              <p class="text-xs text-slate-400 mt-1">e.g. "What topics were discussed?" or "Summarize from 00:02:00 to 00:05:00."</p>
-            </div>
-            <div
-              v-for="(msg, i) in chatMessages"
-              :key="i"
-              class="flex"
-              :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
-            >
-              <div
-                class="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm"
-                :class="msg.role === 'user'
-                  ? 'bg-indigo-600 text-white rounded-br-sm'
-                  : 'bg-slate-100 text-slate-800 rounded-bl-sm'"
-              >
-                <p class="whitespace-pre-wrap break-words">{{ msg.content }}</p>
+              <!-- Navigation -->
+              <div class="flex items-center justify-between">
+                <button @click="prevCard" :disabled="currentCardIndex === 0" class="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition px-3 py-1.5 rounded-lg hover:bg-indigo-50">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                  Prev
+                </button>
+                <span class="text-xs font-semibold text-slate-500">{{ currentCardIndex + 1 }} / {{ flashcards.length }}</span>
+                <button @click="nextCard" :disabled="currentCardIndex === flashcards.length - 1" class="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition px-3 py-1.5 rounded-lg hover:bg-indigo-50">
+                  Next
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </button>
               </div>
             </div>
-            <div v-if="chatLoading" class="flex justify-start">
-              <div class="bg-slate-100 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1.5">
-                <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay:0ms"></span>
-                <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay:150ms"></span>
-                <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay:300ms"></span>
-              </div>
+            <div v-else-if="!flashcardsLoading" class="text-center py-3 text-xs text-slate-400">
+              Generate flashcards from this transcript to start studying.
             </div>
-          </div>
-          <!-- Error -->
-          <div v-if="chatError" class="mx-5 mb-2">
-            <div class="bg-red-50 border border-red-200 rounded-xl p-2.5 flex items-start gap-2">
-              <svg class="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-              <p class="text-xs text-red-700 font-semibold">{{ chatError }}</p>
-            </div>
-          </div>
-          <!-- Input -->
-          <div class="border-t border-slate-200 p-4 flex items-end gap-3">
-            <textarea
-              v-model="chatInput"
-              @keydown="handleChatKeydown"
-              placeholder="Ask a question about the transcript… (Enter to send)"
-              rows="2"
-              :disabled="chatLoading"
-              class="flex-1 resize-none border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition disabled:opacity-50 leading-relaxed"
-            ></textarea>
-            <button
-              @click="sendChat"
-              :disabled="chatLoading || !chatInput.trim()"
-              class="flex-shrink-0 flex items-center justify-center w-10 h-10 bg-teal-600 hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition shadow-sm"
-              aria-label="Send message"
-            >
-              <svg v-if="chatLoading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-              <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-            </button>
           </div>
         </div>
-      </div>
 
-      <!-- ───────────────────────── Actions ───────────────────────── -->
-      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div @click="toggleSection('actions')" class="px-6 py-4 border-b border-slate-200 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-              </svg>
+        <!-- ── Tab Panel: Actions ── -->
+        <div v-if="activeTab === 'actions'" class="p-6 space-y-6">
+
+          <!-- Audio player -->
+          <div>
+            <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <svg class="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M12 9.5v5m-3.536-6.036a5 5 0 000 7.072"/></svg>
+              Audio Source
+            </h3>
+            <audio controls class="w-full rounded-xl" :src="downloadUrl('audio')" />
+          </div>
+
+          <!-- Speaker timeline image -->
+          <div v-if="manifest?.files?.timeline_png">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                <svg class="w-3.5 h-3.5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
+                Speaker Timeline
+              </h3>
+              <a :href="downloadUrl('image')" download class="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                PNG
+              </a>
             </div>
-            <h2 class="text-sm font-bold text-slate-800">Actions</h2>
-          </div>
-          <svg :class="{'rotate-180': uiState.actions}" class="w-4 h-4 text-slate-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </div>
-
-        <div v-show="uiState.actions" class="p-6 space-y-6">
-
-          <!-- Re-run buttons -->
-          <div v-if="canSummarize || canVisualize">
-            <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Re-run Pipeline Steps</h3>
-            <div class="flex flex-wrap gap-3">
-              <button
-                v-if="canSummarize"
-                @click="runSummarizeDetail"
-                :disabled="actionLoading.summarize"
-                class="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition shadow-sm"
-              >
-                <svg v-if="actionLoading.summarize" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                {{ actionLoading.summarize ? 'Summarizing…' : 'Run Summarize' }}
-              </button>
-              <button
-                v-if="canVisualize"
-                @click="runVisualizeDetail"
-                :disabled="actionLoading.visualize"
-                class="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition shadow-sm"
-              >
-                <svg v-if="actionLoading.visualize" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
-                {{ actionLoading.visualize ? 'Visualizing…' : 'Run Visualize' }}
-              </button>
-            </div>
+            <img :src="downloadUrl('image')" class="w-full rounded-xl border border-slate-200" alt="Speaker timeline visualization" @error="$event.target.style.display = 'none'" />
           </div>
 
-          <!-- Action feedback -->
-          <div v-if="actionError" class="bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
-            <svg class="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-            <p class="text-xs text-red-700 font-semibold">{{ actionError }}</p>
-          </div>
-          <div v-if="actionSuccess" class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2">
-            <svg class="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-            <p class="text-xs text-emerald-700 font-semibold">{{ actionSuccess }}</p>
-          </div>
-
-          <!-- Translation -->
+          <!-- Translate outputs -->
           <div class="space-y-4 pt-4 border-t border-slate-100">
             <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Translate Outputs</h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -611,19 +615,14 @@
                     autocomplete="off"
                     class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
                   />
-                  <div
-                    v-if="translateLangDropdownOpen && filteredTargetLanguages.length"
-                    class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-52 overflow-y-auto"
-                  >
+                  <div v-if="translateLangDropdownOpen && filteredTargetLanguages.length" class="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-52 overflow-y-auto">
                     <div
                       v-for="lang in filteredTargetLanguages"
                       :key="lang.code"
                       @mousedown.prevent="selectTargetLang(lang)"
                       :class="translateForm.targetLang === lang.code ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-700 hover:bg-slate-50'"
                       class="px-3 py-2 text-sm cursor-pointer"
-                    >
-                      {{ lang.label }}
-                    </div>
+                    >{{ lang.label }}</div>
                   </div>
                 </div>
               </div>
@@ -677,12 +676,11 @@
           </div>
 
         </div>
-      </div>
 
+      </div>
     </template>
   </div>
 </template>
-
 <script setup>
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
@@ -819,21 +817,9 @@ const WHISPER_LANG_TO_NAME = {
   yo: 'Yoruba', zu: 'Zulu'
 }
 
-// --- UI Toggle State ---
-const uiState = ref({
-  summary: true,
-  editor: true,
-  raw: true,
-  audio: true,
-  visualization: true,
-  flashcards: false,
-  chatbot: false,
-  actions: true
-})
-
-const toggleSection = (sectionName) => {
-  uiState.value[sectionName] = !uiState.value[sectionName]
-}
+// --- Tab Navigation State ---
+const activeTab = ref('summary')           // 'summary' | 'transcript' | 'ai' | 'actions'
+const activeTranscriptTab = ref('editor')  // 'editor' | 'raw'
 
 // --- Core API Data ---
 const loading = ref(false)
@@ -1183,6 +1169,9 @@ const resetDetailState = () => {
   chatMessages.value = []
   chatInput.value = ''
   chatError.value = ''
+  // Reset tab state
+  activeTab.value = 'summary'
+  activeTranscriptTab.value = 'editor'
 }
 
 const hasDetailContent = (payload) => {
@@ -1421,6 +1410,21 @@ const switchToTranslation = async (langPair) => {
 }
 
 watch(() => route.params.folderName, loadDetail, { immediate: true })
+
+// After load, auto-navigate to Transcript tab when no summary is available
+watch(loading, (isLoading) => {
+  if (!isLoading && !error.value) {
+    if (!detail.value.summary && (transcriptData.value.length > 0 || detail.value.transcript)) {
+      activeTab.value = 'transcript'
+    }
+    // Default transcript sub-tab based on available data
+    if (!transcriptData.value.length && detail.value.transcript) {
+      activeTranscriptTab.value = 'raw'
+    } else {
+      activeTranscriptTab.value = 'editor'
+    }
+  }
+})
 </script>
 
 <style scoped>
