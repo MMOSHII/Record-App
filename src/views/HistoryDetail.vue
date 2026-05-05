@@ -167,7 +167,7 @@
           </button>
 
           <button
-            v-if="transcriptData.length > 0 || detail.transcript"
+            v-if="hasTranscriptContent"
             @click="activeTab = 'transcript'"
             :class="activeTab === 'transcript'
               ? 'text-emerald-700 bg-emerald-50 border-emerald-400'
@@ -831,6 +831,7 @@ const detail = ref({
 })
 const folderName = computed(() => String(route.params.folderName || ''))
 const fileName = computed(() => manifest.value?.file_name || '')
+const hasTranscriptContent = computed(() => transcriptData.value.length > 0 || Boolean(detail.value.transcript))
 
 // --- Action state ---
 const actionLoading = reactive({ summarize: false, visualize: false })
@@ -1414,14 +1415,16 @@ watch(() => route.params.folderName, loadDetail, { immediate: true })
 // After load, auto-navigate to Transcript tab when no summary is available
 watch(loading, (isLoading) => {
   if (!isLoading && !error.value) {
-    if (!detail.value.summary && (transcriptData.value.length > 0 || detail.value.transcript)) {
+    if (!detail.value.summary && hasTranscriptContent.value) {
       activeTab.value = 'transcript'
     }
-    // Default transcript sub-tab based on available data
-    if (!transcriptData.value.length && detail.value.transcript) {
-      activeTranscriptTab.value = 'raw'
-    } else {
-      activeTranscriptTab.value = 'editor'
+    // Default transcript sub-tab based on available data (only when on the transcript tab)
+    if (activeTab.value === 'transcript') {
+      if (!transcriptData.value.length && detail.value.transcript) {
+        activeTranscriptTab.value = 'raw'
+      } else {
+        activeTranscriptTab.value = 'editor'
+      }
     }
   }
 })
