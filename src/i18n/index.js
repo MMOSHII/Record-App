@@ -15,6 +15,7 @@ import fr from './locales/fr.js'
 import es from './locales/es.js'
 import ar from './locales/ar.js'
 import de from './locales/de.js'
+import id from './locales/id.js'
 
 /** All supported locales with their display names and text direction. */
 export const LOCALES = [
@@ -22,10 +23,11 @@ export const LOCALES = [
   { code: 'fr', label: 'Français', dir: 'ltr' },
   { code: 'es', label: 'Español', dir: 'ltr' },
   { code: 'ar', label: 'العربية', dir: 'rtl' },
-  { code: 'de', label: 'Deutsch', dir: 'ltr' }
+  { code: 'de', label: 'Deutsch', dir: 'ltr' },
+  { code: 'id', label: 'Bahasa Indonesia', dir: 'ltr' }
 ]
 
-const MESSAGES = { en, fr, es, ar, de }
+const MESSAGES = { en, fr, es, ar, de, id }
 const STORAGE_KEY = 'i18n_locale'
 
 /**

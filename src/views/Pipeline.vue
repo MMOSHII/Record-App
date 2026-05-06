@@ -75,6 +75,7 @@
           </svg>
           {{ t('pipeline.recordAudio') }}
         </button>
+      </div>
 
       <!-- Upload Mode -->
       <div v-if="inputMode === 'upload'">
