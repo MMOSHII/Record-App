@@ -11,13 +11,25 @@
           class="self-start md:self-auto px-3 py-1 rounded-lg text-xs font-bold uppercase"
           :class="statusBadgeClass"
         >
-          {{ pipeline.status }}
+          {{ statusBadgeLabel }}
         </span>
       </div>
 
       <!-- Progress Stepper -->
       <div class="mt-6">
         <Stepper :currentStep="pipeline.currentStep" :isRunning="pipeline.status === 'running'" />
+      </div>
+
+      <!-- Current Sub-Step (shown while running) -->
+      <div
+        v-if="pipeline.status === 'running' && pipeline.currentSubStep"
+        class="mt-4 flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2.5"
+      >
+        <svg class="w-4 h-4 text-indigo-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+        <span class="text-sm font-semibold text-indigo-700">{{ pipeline.currentSubStep }}</span>
       </div>
 
       <!-- Overall Completion Progress Bar (shown once pipeline has started) -->
@@ -130,6 +142,7 @@
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
               </svg>
               {{ stageLabels[activeStageKey] || activeStageKey }}
+              <span v-if="pipeline.currentSubStep" class="text-indigo-500 font-normal">— {{ pipeline.currentSubStep }}</span>
             </span>
             <span class="font-mono text-indigo-500">
               {{ activeStageStart ? formatDuration(currentTime - activeStageStart) : '…' }}
@@ -707,6 +720,10 @@ const statusBadgeClass = computed(() => {
   return 'bg-slate-100 text-slate-500'
 })
 
+// Short label for the status badge — shows "running" while in flight so the badge
+// stays concise; the detailed sub-step description is shown separately below the stepper.
+const statusBadgeLabel = computed(() => pipeline.status)
+
 const onFileChange = (e) => {
   selectedFile.value = e.target.files[0] || null
 }
@@ -893,6 +910,7 @@ const startPipeline = async () => {
   pipeline.status = 'running'
   pipeline.currentStep = 1
   pipeline.lastError = ''
+  pipeline.currentSubStep = 'Uploading file chunks to server…'
   pipeline.startedAt = Date.now()
   pipeline.completedAt = null
   pipeline.stageTimings = { upload: { start: Date.now() } }
@@ -901,6 +919,7 @@ const startPipeline = async () => {
     // Step 1: Upload + Transcribe (always uses chunked upload)
     const transcribeResult = await uploadFileChunked(fileToUpload)
     pipeline.stageTimings.upload.end = Date.now()
+    pipeline.currentSubStep = ''
     pipeline.folderName = transcribeResult.folder_name || transcribeResult.folderName || ''
     pipeline.fileName =
       transcribeResult.file_name ||
@@ -914,6 +933,7 @@ const startPipeline = async () => {
     pipeline.status = 'idle'
   } catch (err) {
     pipeline.status = 'error'
+    pipeline.currentSubStep = ''
     pipeline.lastError = err.message
     chunkUploadStep.value = ''
     return
@@ -966,6 +986,7 @@ const uploadFileChunked = async (file) => {
   }
 
   // Assemble + transcribe
+  pipeline.currentSubStep = 'Assembling & transcribing audio…'
   chunkUploadStep.value = 'assembling'
   chunkUploadProgress.value = 95
   const result = await api.completeChunkedUpload(upload_id)
@@ -979,11 +1000,13 @@ const runSummarize = async () => {
 
   pipeline.status = 'running'
   pipeline.lastError = ''
+  pipeline.currentSubStep = 'Summarizing transcript…'
   pipeline.stageTimings.summarize = { start: Date.now() }
 
   try {
     const summarizeResult = await api.summarizeJob(pipeline.folderName, pipeline.fileName)
     pipeline.stageTimings.summarize.end = Date.now()
+    pipeline.currentSubStep = ''
     pipeline.results = {
       ...pipeline.results,
       summary: summarizeResult.summary || '',
@@ -993,6 +1016,7 @@ const runSummarize = async () => {
     pipeline.status = 'idle'
   } catch (err) {
     pipeline.status = 'error'
+    pipeline.currentSubStep = ''
     pipeline.lastError = err.message
     return
   }
@@ -1006,11 +1030,13 @@ const runVisualize = async () => {
 
   pipeline.status = 'running'
   pipeline.lastError = ''
+  pipeline.currentSubStep = 'Generating visualization…'
   pipeline.stageTimings.visualize = { start: Date.now() }
 
   try {
     const visualizeResult = await api.visualizeJob(pipeline.folderName, pipeline.fileName)
     pipeline.stageTimings.visualize.end = Date.now()
+    pipeline.currentSubStep = ''
     pipeline.results = {
       ...pipeline.results,
       mindmap_svg: visualizeResult.svg || visualizeResult.mindmap_svg || '',
@@ -1021,6 +1047,7 @@ const runVisualize = async () => {
     pipeline.completedAt = Date.now()
   } catch (err) {
     pipeline.status = 'error'
+    pipeline.currentSubStep = ''
     pipeline.lastError = err.message
   }
 }
@@ -1030,12 +1057,14 @@ const rerunTranscribe = async () => {
 
   pipeline.status = 'running'
   pipeline.lastError = ''
+  pipeline.currentSubStep = 'Re-transcribing audio…'
   pipeline.stageTimings = { upload: { start: Date.now() } }
   pipeline.completedAt = null
 
   try {
     const result = await api.retranscribeJob(pipeline.folderName, pipeline.fileName)
     pipeline.stageTimings.upload.end = Date.now()
+    pipeline.currentSubStep = ''
     pipeline.results = {
       transcription: result.transcript || '',
       summary: '',
@@ -1047,6 +1076,7 @@ const rerunTranscribe = async () => {
     pipeline.status = 'idle'
   } catch (err) {
     pipeline.status = 'error'
+    pipeline.currentSubStep = ''
     pipeline.lastError = err.message
     return
   }

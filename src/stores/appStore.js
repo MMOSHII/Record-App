@@ -36,6 +36,7 @@ const state = reactive({
     fileName: savedState.pipeline?.fileName || '',
     results: savedState.pipeline?.results || {},
     lastError: savedState.pipeline?.lastError || '',
+    currentSubStep: savedState.pipeline?.currentSubStep || '',
     startedAt: savedState.pipeline?.startedAt || null,
     completedAt: savedState.pipeline?.completedAt || null,
     stageTimings: savedState.pipeline?.stageTimings && typeof savedState.pipeline.stageTimings === 'object'
@@ -71,6 +72,7 @@ const logout = () => {
     fileName: '',
     results: {},
     lastError: '',
+    currentSubStep: '',
     startedAt: null,
     completedAt: null,
     stageTimings: {}
@@ -85,6 +87,7 @@ const clearPipeline = () => {
     fileName: '',
     results: {},
     lastError: '',
+    currentSubStep: '',
     startedAt: null,
     completedAt: null,
     stageTimings: {}
