@@ -706,7 +706,7 @@ const startPipeline = async () => {
 
   try {
     // Step 1: Upload + Transcribe (always uses chunked upload)
-    const transcribeResult = await uploadLargeFile(fileToUpload)
+    const transcribeResult = await uploadFileChunked(fileToUpload)
     pipeline.folderName = transcribeResult.folder_name || transcribeResult.folderName || ''
     pipeline.fileName =
       transcribeResult.file_name ||
@@ -734,7 +734,7 @@ const startPipeline = async () => {
  * Splits the file into CHUNK_SIZE pieces, uploads them in parallel batches,
  * retries failed chunks, then calls /upload/complete to assemble + transcribe.
  */
-const uploadLargeFile = async (file) => {
+const uploadFileChunked = async (file) => {
   const totalChunks = Math.ceil(file.size / api.CHUNK_SIZE)
   chunkUploadProgress.value = 0
   chunkUploadStep.value = 'uploading'
