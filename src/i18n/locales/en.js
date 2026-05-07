@@ -141,7 +141,17 @@ export default {
     passwordFailed: 'Failed to update password.',
     autoSaveNote: 'Settings are saved automatically to your device.',
     language: 'Language',
-    selectLanguage: 'Select your display language'
+    selectLanguage: 'Select your display language',
+    creatorsTitle: 'Creators',
+    creatorsSubtitle: 'Contributors to this repository.',
+    creatorsLoading: 'Loading contributors…',
+    creatorsEmpty: 'No contributors found.',
+    creatorsLoadFailedStatus: 'Failed to load contributors (status {status}).',
+    creatorsLoadFailedGeneric: 'Failed to load contributors.',
+    unknownContributor: 'Unknown contributor',
+    viewProfile: 'View profile',
+    retry: 'Retry',
+    apiBackendRepository: 'Open API Backend Repository'
   },
   login: {
     appName: 'Record Note',
