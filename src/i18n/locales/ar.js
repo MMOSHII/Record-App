@@ -147,6 +147,7 @@ export default {
     creatorsLoading: 'جارٍ تحميل المساهمين…',
     creatorsEmpty: 'لم يتم العثور على مساهمين.',
     creatorsLoadFailedStatus: 'فشل تحميل المساهمين (الحالة {status}).',
+    creatorsLoadTimedOut: 'انتهت مهلة الطلب. تحقّق من اتصالك ثم حاول مرة أخرى.',
     creatorsLoadFailedGeneric: 'فشل تحميل المساهمين.',
     unknownContributor: 'مساهم غير معروف',
     viewProfile: 'عرض الملف الشخصي',

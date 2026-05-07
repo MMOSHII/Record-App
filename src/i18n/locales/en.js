@@ -147,6 +147,7 @@ export default {
     creatorsLoading: 'Loading contributors…',
     creatorsEmpty: 'No contributors found.',
     creatorsLoadFailedStatus: 'Failed to load contributors (status {status}).',
+    creatorsLoadTimedOut: 'Request timed out. Please check your connection and try again.',
     creatorsLoadFailedGeneric: 'Failed to load contributors.',
     unknownContributor: 'Unknown contributor',
     viewProfile: 'View profile',

@@ -423,7 +423,7 @@ const fetchContributors = async () => {
       ? data.map((contributor, index) => {
         const name = contributor.login || unknownContributor
         return {
-          id: contributor.id ?? contributor.login ?? `contributor-${index}`,
+          id: contributor.id ?? contributor.node_id ?? contributor.login ?? contributor.html_url ?? `contributor-${index}`,
           name,
           avatarUrl: contributor.avatar_url || '',
           profileUrl: contributor.html_url || '',
@@ -432,7 +432,11 @@ const fetchContributors = async () => {
       })
       : []
   } catch (err) {
-    contributorsError.value = err?.message || t('settings.creatorsLoadFailedGeneric')
+    if (err?.name === 'TimeoutError') {
+      contributorsError.value = t('settings.creatorsLoadTimedOut')
+    } else {
+      contributorsError.value = t('settings.creatorsLoadFailedGeneric')
+    }
     contributors.value = []
   } finally {
     contributorsLoading.value = false

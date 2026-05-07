@@ -147,6 +147,7 @@ export default {
     creatorsLoading: 'Memuat kontributor…',
     creatorsEmpty: 'Tidak ada kontributor ditemukan.',
     creatorsLoadFailedStatus: 'Gagal memuat kontributor (status {status}).',
+    creatorsLoadTimedOut: 'Permintaan habis waktu. Periksa koneksi Anda lalu coba lagi.',
     creatorsLoadFailedGeneric: 'Gagal memuat kontributor.',
     unknownContributor: 'Kontributor tidak dikenal',
     viewProfile: 'Lihat profil',

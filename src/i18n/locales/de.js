@@ -147,6 +147,7 @@ export default {
     creatorsLoading: 'Mitwirkende werden geladen…',
     creatorsEmpty: 'Keine Mitwirkenden gefunden.',
     creatorsLoadFailedStatus: 'Mitwirkende konnten nicht geladen werden (Status {status}).',
+    creatorsLoadTimedOut: 'Zeitüberschreitung bei der Anfrage. Bitte Verbindung prüfen und erneut versuchen.',
     creatorsLoadFailedGeneric: 'Mitwirkende konnten nicht geladen werden.',
     unknownContributor: 'Unbekannter Mitwirkender',
     viewProfile: 'Profil anzeigen',

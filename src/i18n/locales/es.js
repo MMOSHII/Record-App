@@ -147,6 +147,7 @@ export default {
     creatorsLoading: 'Cargando colaboradores…',
     creatorsEmpty: 'No se encontraron colaboradores.',
     creatorsLoadFailedStatus: 'No se pudieron cargar los colaboradores (estado {status}).',
+    creatorsLoadTimedOut: 'La solicitud excedió el tiempo de espera. Revisa tu conexión e inténtalo de nuevo.',
     creatorsLoadFailedGeneric: 'No se pudieron cargar los colaboradores.',
     unknownContributor: 'Colaborador desconocido',
     viewProfile: 'Ver perfil',

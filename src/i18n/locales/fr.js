@@ -147,6 +147,7 @@ export default {
     creatorsLoading: 'Chargement des contributeurs…',
     creatorsEmpty: 'Aucun contributeur trouvé.',
     creatorsLoadFailedStatus: 'Échec du chargement des contributeurs (statut {status}).',
+    creatorsLoadTimedOut: 'La requête a expiré. Vérifiez votre connexion puis réessayez.',
     creatorsLoadFailedGeneric: 'Échec du chargement des contributeurs.',
     unknownContributor: 'Contributeur inconnu',
     viewProfile: 'Voir le profil',
