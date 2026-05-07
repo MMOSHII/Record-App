@@ -137,7 +137,7 @@
     <!-- User Info -->
     <div
       v-if="store.state.user"
-      class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6"
+      class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4"
     >
       <h2 class="text-base font-bold text-slate-900 mb-3">{{ t('settings.account') }}</h2>
       <div class="flex items-center gap-3">
@@ -158,6 +158,12 @@
           <p class="text-xs text-slate-500">{{ store.state.user.email }}</p>
         </div>
       </div>
+      <button
+        @click="handleLogout"
+        class="w-full md:w-auto bg-red-50 hover:bg-red-100 text-red-600 font-semibold px-4 py-2.5 rounded-xl text-sm transition"
+      >
+        {{ t('nav.signOut') }}
+      </button>
     </div>
 
     <!-- Change Password (basic-auth users only) -->
@@ -256,11 +262,13 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAppStore } from '../stores/appStore'
 import { changePassword } from '../services/authService'
 import { useI18n } from '../i18n/index.js'
 
 const store = useAppStore()
+const router = useRouter()
 const settings = store.state.settings
 const { t, locale, setLocale, availableLocales } = useI18n()
 
@@ -307,6 +315,11 @@ const modelPlaceholder = computed(() => {
   }
   return map[settings.provider] || 'Model name'
 })
+
+const handleLogout = () => {
+  store.logout()
+  router.push('/login')
+}
 
 const testConnection = async () => {
   testing.value = true
