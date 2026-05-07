@@ -106,12 +106,14 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAppStore } from './stores/appStore'
 import { refreshAccessToken } from './services/authService'
 import NavIcon from './components/NavIcon.vue'
 import { useI18n } from './i18n/index.js'
 
 const store = useAppStore()
+const router = useRouter()
 const mobileMenuOpen = ref(false)
 const transitionName = ref('slide-left')
 const { t } = useI18n()
