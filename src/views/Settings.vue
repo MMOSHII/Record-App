@@ -225,7 +225,7 @@
               v-else
               class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0"
             >
-              {{ contributor.name?.charAt(0)?.toUpperCase() || t('settings.unknownContributor').charAt(0).toUpperCase() }}
+              {{ contributor.fallbackInitial }}
             </div>
             <span class="text-sm font-medium text-slate-800 truncate">{{ contributor.name }}</span>
           </div>
@@ -418,13 +418,18 @@ const fetchContributors = async () => {
     }
 
     const data = await response.json()
+    const unknownContributor = t('settings.unknownContributor')
     contributors.value = Array.isArray(data)
-      ? data.map((contributor) => ({
-        id: contributor.id ?? contributor.login,
-        name: contributor.login || t('settings.unknownContributor'),
-        avatarUrl: contributor.avatar_url || '',
-        profileUrl: contributor.html_url || ''
-      })).map((contributor, index) => ({ ...contributor, id: contributor.id ?? `contributor-${index}` }))
+      ? data.map((contributor, index) => {
+        const name = contributor.login || unknownContributor
+        return {
+          id: contributor.id ?? contributor.login ?? `contributor-${index}`,
+          name,
+          avatarUrl: contributor.avatar_url || '',
+          profileUrl: contributor.html_url || '',
+          fallbackInitial: name.charAt(0).toUpperCase()
+        }
+      })
       : []
   } catch (err) {
     contributorsError.value = err?.message || t('settings.creatorsLoadFailedGeneric')
