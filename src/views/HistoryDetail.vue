@@ -336,9 +336,11 @@
 
             <div>
               <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Transkrip Percakapan</h3>
-              <p v-if="transcriptSaveError" class="text-xs text-red-600 font-semibold mb-2">{{ transcriptSaveError }}</p>
-              <p v-else-if="transcriptSaveLoading" class="text-xs text-slate-500 font-semibold mb-2">Saving transcript changes…</p>
-              <p v-else-if="!transcriptDirty && transcriptData.length" class="text-xs text-emerald-600 font-semibold mb-2">Transcript changes saved.</p>
+              <div role="status" aria-live="polite">
+                <p v-if="transcriptSaveError" class="text-xs text-red-600 font-semibold mb-2">{{ transcriptSaveError }}</p>
+                <p v-else-if="transcriptSaveLoading" class="text-xs text-slate-500 font-semibold mb-2">Saving transcript changes…</p>
+                <p v-else-if="!transcriptDirty && transcriptData.length" class="text-xs text-emerald-600 font-semibold mb-2">Transcript changes saved.</p>
+              </div>
               <div class="flex flex-col space-y-4 max-h-[600px] overflow-y-auto pr-2 pb-4">
                 <div v-if="filteredTranscript.length === 0" class="text-sm text-slate-400 italic text-center py-4">Data kosong.</div>
                 <div v-for="item in filteredTranscript" :key="item._id"
@@ -641,6 +643,7 @@
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import MarkdownIt from 'markdown-it'
+import DOMPurify from 'dompurify'
 import { getJob, getDownloadUrl, summarizeJob, visualizeJob, translateJob, saveTranscript, generateFlashcards, sendChatMessage } from '../services/api'
 import { useAppStore } from '../stores/appStore'
 import { useI18n } from '../i18n/index.js'
@@ -1000,10 +1003,14 @@ const markdownRenderer = new MarkdownIt({
 const defaultValidateLink = markdownRenderer.validateLink.bind(markdownRenderer)
 markdownRenderer.validateLink = (url) => {
   const normalized = String(url || '').trim().toLowerCase()
-  if (normalized.startsWith('javascript:') || normalized.startsWith('data:') || normalized.startsWith('vbscript:')) return false
+  if (normalized.startsWith('#') || normalized.startsWith('/')) return true
+  if (normalized.startsWith('//')) return false
+  if (!/^(https?:|mailto:)/.test(normalized)) return false
   return defaultValidateLink(url)
 }
-const renderedSummary = computed(() => markdownRenderer.render(detail.value.summary || ''))
+const renderedSummary = computed(() =>
+  DOMPurify.sanitize(markdownRenderer.render(detail.value.summary || ''))
+)
 
 // Extract available languages directly from the data
 const availableLanguages = computed(() => {
@@ -1322,7 +1329,7 @@ const runSummarizeDetail = async () => {
   actionSuccess.value = ''
   try {
     await flushTranscriptSave()
-    if (transcriptSaveError.value) throw new Error(`Failed to save transcript changes before summarization: ${transcriptSaveError.value}`)
+    if (transcriptSaveError.value) throw new Error(transcriptSaveError.value)
     await summarizeJob(folderName.value, fileName.value)
     actionSuccess.value = 'Summarization complete. Reloading…'
     await loadDetail()
