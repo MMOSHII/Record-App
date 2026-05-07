@@ -35,7 +35,13 @@ const state = reactive({
     folderName: savedState.pipeline?.folderName || '',
     fileName: savedState.pipeline?.fileName || '',
     results: savedState.pipeline?.results || {},
-    lastError: savedState.pipeline?.lastError || ''
+    lastError: savedState.pipeline?.lastError || '',
+    currentSubStep: savedState.pipeline?.currentSubStep || '',
+    startedAt: savedState.pipeline?.startedAt || null,
+    completedAt: savedState.pipeline?.completedAt || null,
+    stageTimings: savedState.pipeline?.stageTimings && typeof savedState.pipeline.stageTimings === 'object'
+      ? savedState.pipeline.stageTimings
+      : {}
   }
 })
 
@@ -65,7 +71,11 @@ const logout = () => {
     folderName: '',
     fileName: '',
     results: {},
-    lastError: ''
+    lastError: '',
+    currentSubStep: '',
+    startedAt: null,
+    completedAt: null,
+    stageTimings: {}
   }
 }
 
@@ -76,7 +86,11 @@ const clearPipeline = () => {
     folderName: '',
     fileName: '',
     results: {},
-    lastError: ''
+    lastError: '',
+    currentSubStep: '',
+    startedAt: null,
+    completedAt: null,
+    stageTimings: {}
   }
 }
 

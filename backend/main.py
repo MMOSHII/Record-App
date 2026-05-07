@@ -23,6 +23,7 @@ import contextlib
 import datetime
 import ffmpeg
 from dotenv import load_dotenv
+from filelock import FileLock, Timeout
 from typing import Optional, Dict, Any, List, Literal
 
 import re
@@ -349,18 +350,32 @@ def _upload_dir(user_id: str, upload_id: str) -> str:
     safe_uid = _sanitize_name(upload_id, "upload_id")
     return _safe_join(BASE_DIR, user_id, _UPLOADS_SUBDIR, safe_uid)
 
-
 def _read_upload_state(upload_directory: str) -> Dict[str, Any]:
     p = os.path.join(upload_directory, "upload_state.json")
+    lock_path = os.path.join(upload_directory, "upload_state.lock")
+    
     if not os.path.exists(p):
         raise HTTPException(status_code=404, detail="Upload session not found.")
-    with open(p, "r", encoding="utf-8") as f:
-        return json.load(f)
-
+    
+    try:
+        with FileLock(lock_path, timeout=10):
+            with open(p, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Upload state corrupted.")
+    except Timeout:
+        raise HTTPException(status_code=503, detail="Server busy handling upload chunks. Try again.")
 
 def _write_upload_state(upload_directory: str, state: Dict[str, Any]) -> None:
-    with open(os.path.join(upload_directory, "upload_state.json"), "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=2)
+    p = os.path.join(upload_directory, "upload_state.json")
+    lock_path = os.path.join(upload_directory, "upload_state.lock")
+    
+    try:
+        with FileLock(lock_path, timeout=10):
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(state, f, ensure_ascii=False, indent=2)
+    except Timeout:
+        raise HTTPException(status_code=503, detail="Server busy handling upload chunks. Try again.")
 
 
 # =========================================================
@@ -1254,39 +1269,54 @@ async def upload_chunk(
 
     Chunks are identified by their zero-based ``chunk_index``.  Re-uploading
     the same ``chunk_index`` is idempotent and can be used to recover from a
-    failed or incomplete chunk transfer – the server will simply overwrite the
+    failed or incomplete chunk transfer - the server will simply overwrite the
     previously stored data and return the current progress.
     """
     try:
         user_id = _resolve_user(google_token)
         upload_directory = _upload_dir(user_id, upload_id)
-        state = _read_upload_state(upload_directory)
-
-        if state.get("user_id") != user_id:
-            raise HTTPException(status_code=403, detail="Access denied.")
-
-        total_chunks: int = state["total_chunks"]
-        if chunk_index < 0 or chunk_index >= total_chunks:
-            raise HTTPException(
-                status_code=400,
-                detail=f"chunk_index must be between 0 and {total_chunks - 1}.",
-            )
-
-        # Save the chunk; overwrite if already present (idempotent retry)
+        
         chunk_filename = f"chunk_{chunk_index:06d}.bin"
         chunk_path = _safe_join(upload_directory, chunk_filename)
         with open(chunk_path, "wb") as f_out:
             shutil.copyfileobj(file.file, f_out)
 
-        # Update received_chunks list
-        received: List[int] = state["received_chunks"]
-        if chunk_index not in received:
-            received.append(chunk_index)
-            received.sort()
-            state["received_chunks"] = received
-            _write_upload_state(upload_directory, state)
+        state_path = os.path.join(upload_directory, "upload_state.json")
+        lock_path = os.path.join(upload_directory, "upload_state.lock")
+        
+        try:
+            with FileLock(lock_path, timeout=15):
+                
+                with open(state_path, "r", encoding="utf-8") as f:
+                    state = json.load(f)
+
+                if state.get("user_id") != user_id:
+                    raise HTTPException(status_code=403, detail="Access denied.")
+
+                total_chunks: int = state["total_chunks"]
+                if chunk_index < 0 or chunk_index >= total_chunks:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"chunk_index must be between 0 and {total_chunks - 1}.",
+                    )
+
+                received: List[int] = state.get("received_chunks", [])
+                if chunk_index not in received:
+                    received.append(chunk_index)
+                    received.sort()
+                    state["received_chunks"] = received
+                    
+                    with open(state_path, "w", encoding="utf-8") as f:
+                        json.dump(state, f, ensure_ascii=False, indent=2)
+                        
+        except Timeout:
+            raise HTTPException(
+                status_code=503, 
+                detail=f"Server busy tracking chunk {chunk_index}. Please retry."
+            )
 
         all_received = len(received) == total_chunks
+        
         return JSONResponse(
             status_code=200,
             content={
@@ -1297,6 +1327,7 @@ async def upload_chunk(
                 "complete": all_received,
             },
         )
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -1495,6 +1526,8 @@ async def upload_complete(
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/v1/translate")
 async def translate_outputs(req: TranslateRequest):
     """

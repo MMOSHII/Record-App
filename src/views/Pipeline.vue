@@ -11,13 +11,40 @@
           class="self-start md:self-auto px-3 py-1 rounded-lg text-xs font-bold uppercase"
           :class="statusBadgeClass"
         >
-          {{ pipeline.status }}
+          {{ statusBadgeLabel }}
         </span>
       </div>
 
       <!-- Progress Stepper -->
       <div class="mt-6">
         <Stepper :currentStep="pipeline.currentStep" :isRunning="pipeline.status === 'running'" />
+      </div>
+
+      <!-- Current Sub-Step (shown while running) -->
+      <div
+        v-if="pipeline.status === 'running' && pipeline.currentSubStep"
+        class="mt-4 flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2.5"
+      >
+        <svg class="w-4 h-4 text-indigo-500 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+        </svg>
+        <span class="text-sm font-semibold text-indigo-700">{{ pipeline.currentSubStep }}</span>
+      </div>
+
+      <!-- Overall Completion Progress Bar (shown once pipeline has started) -->
+      <div v-if="pipeline.currentStep > 1 || pipeline.status === 'done'" class="mt-5">
+        <div class="flex items-center justify-between text-xs font-semibold text-slate-600 mb-1.5">
+          <span>Pipeline Progress</span>
+          <span class="font-mono">{{ completionRate }}%</span>
+        </div>
+        <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+          <div
+            class="h-2 rounded-full transition-all duration-700"
+            :class="pipeline.status === 'error' ? 'bg-red-400' : pipeline.status === 'done' ? 'bg-emerald-500' : 'bg-indigo-500'"
+            :style="{ width: completionRate + '%' }"
+          />
+        </div>
       </div>
     </div>
 
@@ -40,6 +67,108 @@
         class="text-red-400 hover:text-red-600 transition text-lg leading-none"
         aria-label="Dismiss error"
       >×</button>
+    </div>
+
+    <!-- Pipeline Insights Card (shown once pipeline has progressed past step 1) -->
+    <div
+      v-if="pipeline.currentStep > 1 || pipeline.status === 'done'"
+      class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6"
+    >
+      <h2 class="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+        <svg class="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+        </svg>
+        Pipeline Insights
+      </h2>
+
+      <!-- Key Metrics Grid -->
+      <div class="grid grid-cols-3 gap-3 mb-5">
+        <div class="bg-indigo-50 rounded-xl p-3 text-center">
+          <div class="text-2xl font-extrabold text-indigo-600">{{ completionRate }}%</div>
+          <div class="text-xs text-slate-500 mt-0.5">Completed</div>
+        </div>
+        <div class="bg-slate-50 rounded-xl p-3 text-center">
+          <div class="font-extrabold text-slate-800" :class="pipeline.status === 'running' ? 'text-base' : 'text-2xl'">
+            <span v-if="pipeline.status === 'running'" class="flex items-center justify-center gap-1 text-indigo-600">
+              <svg class="w-3.5 h-3.5 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+              {{ formatDuration(totalDurationMs) || 'Running…' }}
+            </span>
+            <span v-else>{{ formatDuration(totalDurationMs) }}</span>
+          </div>
+          <div class="text-xs text-slate-500 mt-0.5">Total Time</div>
+        </div>
+        <div class="bg-amber-50 rounded-xl p-3 text-center">
+          <div class="text-sm font-extrabold text-amber-700 leading-snug truncate">
+            {{ bottleneckStage ? stageLabels[bottleneckStage] : '—' }}
+          </div>
+          <div class="text-xs text-slate-500 mt-0.5">Slowest Stage</div>
+        </div>
+      </div>
+
+      <!-- Stage Duration Bars -->
+      <div v-if="hasStageMetrics || pipeline.status === 'running'" class="space-y-3 mb-5">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Stage Durations</p>
+
+        <!-- Completed stages -->
+        <div v-for="[stage, ms] in Object.entries(stageDurationsMs)" :key="stage" class="space-y-1">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-semibold text-slate-700 flex items-center gap-1.5">
+              {{ stageLabels[stage] || stage }}
+              <span
+                v-if="stage === bottleneckStage"
+                class="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full"
+              >bottleneck</span>
+            </span>
+            <span class="font-mono text-slate-500">{{ formatDuration(ms) }}</span>
+          </div>
+          <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+            <div
+              class="h-2 rounded-full transition-all duration-700"
+              :class="stage === bottleneckStage ? 'bg-amber-400' : (stageBarColors[stage] || 'bg-indigo-400')"
+              :style="{ width: Math.round((ms / maxStageDuration) * 100) + '%' }"
+            />
+          </div>
+        </div>
+
+        <!-- Active stage (currently running) -->
+        <div v-if="pipeline.status === 'running' && activeStageKey" class="space-y-1">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-semibold text-indigo-700 flex items-center gap-1.5">
+              <svg class="w-3 h-3 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+              {{ stageLabels[activeStageKey] || activeStageKey }}
+              <span v-if="pipeline.currentSubStep" class="text-indigo-500 font-normal">— {{ pipeline.currentSubStep }}</span>
+            </span>
+            <span class="font-mono text-indigo-500">
+              {{ activeStageStart ? formatDuration(currentTime - activeStageStart) : '…' }}
+            </span>
+          </div>
+          <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+            <div class="bg-indigo-300 h-2 rounded-full animate-pulse w-full" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Timestamps & Owner Row -->
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-1.5 pt-3 border-t border-slate-100 text-xs text-slate-500">
+        <span v-if="pipeline.startedAt">
+          Started <span class="font-semibold text-slate-700">{{ formatTimestamp(pipeline.startedAt) }}</span>
+        </span>
+        <span v-if="pipeline.completedAt">
+          Completed <span class="font-semibold text-slate-700">{{ formatTimestamp(pipeline.completedAt) }}</span>
+        </span>
+        <span v-if="store.state.user?.name || store.state.user?.email">
+          Owner <span class="font-semibold text-slate-700">{{ store.state.user.name || store.state.user.email }}</span>
+        </span>
+        <span v-if="pipeline.folderName" class="font-mono">
+          Job <span class="font-semibold text-slate-700">{{ pipeline.folderName }}</span>
+        </span>
+      </div>
     </div>
 
     <!-- Upload / Record Section (Step 1) -->
@@ -497,6 +626,79 @@ let audioChunks = []
 let recordingTimer = null
 const micStream = ref(null)
 
+// ── Pipeline Metrics ──────────────────────────────────────────────────────────
+const stageLabels = { upload: 'Upload & Transcribe', summarize: 'Summarize', visualize: 'Visualize' }
+const stageBarColors = { upload: 'bg-indigo-500', summarize: 'bg-amber-500', visualize: 'bg-purple-500' }
+
+// Live clock — ticks every second while pipeline is running so elapsed times stay current
+const currentTime = ref(Date.now())
+let timeTickInterval = null
+
+const stageDurationsMs = computed(() => {
+  const result = {}
+  const timings = pipeline.stageTimings || {}
+  for (const [key, val] of Object.entries(timings)) {
+    if (val?.start && val?.end) {
+      result[key] = val.end - val.start
+    }
+  }
+  return result
+})
+
+const maxStageDuration = computed(() => Math.max(...Object.values(stageDurationsMs.value), 1))
+
+const bottleneckStage = computed(() => {
+  const entries = Object.entries(stageDurationsMs.value)
+  if (!entries.length) return null
+  return entries.reduce((a, b) => (b[1] > a[1] ? b : a))[0]
+})
+
+const totalDurationMs = computed(() => {
+  if (!pipeline.startedAt) return 0
+  if (pipeline.completedAt) return pipeline.completedAt - pipeline.startedAt
+  if (pipeline.status === 'running') return currentTime.value - pipeline.startedAt
+  return 0
+})
+
+// 0 → 33 → 67 → 100 as steps 2, 3, 4 are reached
+const completionRate = computed(() => {
+  if (pipeline.status === 'done' || pipeline.currentStep >= 4) return 100
+  if (pipeline.currentStep === 3) return 67
+  if (pipeline.currentStep === 2) return 33
+  return 0
+})
+
+const hasStageMetrics = computed(() => Object.keys(stageDurationsMs.value).length > 0)
+
+// Which stage is actively running right now
+const activeStageKey = computed(() => {
+  if (pipeline.status !== 'running') return null
+  if (pipeline.currentStep === 1) return 'upload'
+  if (pipeline.currentStep === 2) return 'summarize'
+  if (pipeline.currentStep === 3) return 'visualize'
+  return null
+})
+
+const activeStageStart = computed(() => {
+  const key = activeStageKey.value
+  if (!key) return null
+  return pipeline.stageTimings?.[key]?.start || null
+})
+
+const formatDuration = (ms) => {
+  if (!ms || ms <= 0) return '—'
+  const totalSecs = Math.floor(ms / 1000)
+  if (totalSecs < 60) return `${totalSecs}s`
+  const m = Math.floor(totalSecs / 60)
+  const s = totalSecs % 60
+  return s ? `${m}m ${s}s` : `${m}m`
+}
+
+const formatTimestamp = (ts) => {
+  if (!ts) return ''
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
 const canStartPipeline = computed(() =>
   inputMode.value === 'upload' ? !!selectedFile.value : !!audioBlob.value
 )
@@ -517,6 +719,8 @@ const statusBadgeClass = computed(() => {
   if (s === 'done') return 'bg-emerald-100 text-emerald-700'
   return 'bg-slate-100 text-slate-500'
 })
+
+const statusBadgeLabel = computed(() => pipeline.status)
 
 const onFileChange = (e) => {
   selectedFile.value = e.target.files[0] || null
@@ -613,6 +817,7 @@ const releaseMicStream = () => {
 onUnmounted(() => {
   discardRecording()
   releaseMicStream()
+  clearInterval(timeTickInterval)
 })
 
 const downloadUrl = (type) => {
@@ -703,10 +908,16 @@ const startPipeline = async () => {
   pipeline.status = 'running'
   pipeline.currentStep = 1
   pipeline.lastError = ''
+  pipeline.currentSubStep = 'Uploading file chunks to server…'
+  pipeline.startedAt = Date.now()
+  pipeline.completedAt = null
+  pipeline.stageTimings = { upload: { start: Date.now() } }
 
   try {
     // Step 1: Upload + Transcribe (always uses chunked upload)
     const transcribeResult = await uploadFileChunked(fileToUpload)
+    pipeline.stageTimings.upload.end = Date.now()
+    pipeline.currentSubStep = ''
     pipeline.folderName = transcribeResult.folder_name || transcribeResult.folderName || ''
     pipeline.fileName =
       transcribeResult.file_name ||
@@ -720,6 +931,7 @@ const startPipeline = async () => {
     pipeline.status = 'idle'
   } catch (err) {
     pipeline.status = 'error'
+    pipeline.currentSubStep = ''
     pipeline.lastError = err.message
     chunkUploadStep.value = ''
     return
@@ -772,6 +984,7 @@ const uploadFileChunked = async (file) => {
   }
 
   // Assemble + transcribe
+  pipeline.currentSubStep = 'Assembling & transcribing audio…'
   chunkUploadStep.value = 'assembling'
   chunkUploadProgress.value = 95
   const result = await api.completeChunkedUpload(upload_id)
@@ -785,9 +998,13 @@ const runSummarize = async () => {
 
   pipeline.status = 'running'
   pipeline.lastError = ''
+  pipeline.currentSubStep = 'Summarizing transcript…'
+  pipeline.stageTimings.summarize = { start: Date.now() }
 
   try {
     const summarizeResult = await api.summarizeJob(pipeline.folderName, pipeline.fileName)
+    pipeline.stageTimings.summarize.end = Date.now()
+    pipeline.currentSubStep = ''
     pipeline.results = {
       ...pipeline.results,
       summary: summarizeResult.summary || '',
@@ -797,6 +1014,7 @@ const runSummarize = async () => {
     pipeline.status = 'idle'
   } catch (err) {
     pipeline.status = 'error'
+    pipeline.currentSubStep = ''
     pipeline.lastError = err.message
     return
   }
@@ -810,9 +1028,13 @@ const runVisualize = async () => {
 
   pipeline.status = 'running'
   pipeline.lastError = ''
+  pipeline.currentSubStep = 'Generating visualization…'
+  pipeline.stageTimings.visualize = { start: Date.now() }
 
   try {
     const visualizeResult = await api.visualizeJob(pipeline.folderName, pipeline.fileName)
+    pipeline.stageTimings.visualize.end = Date.now()
+    pipeline.currentSubStep = ''
     pipeline.results = {
       ...pipeline.results,
       mindmap_svg: visualizeResult.svg || visualizeResult.mindmap_svg || '',
@@ -820,8 +1042,10 @@ const runVisualize = async () => {
     }
     pipeline.currentStep = 4
     pipeline.status = 'done'
+    pipeline.completedAt = Date.now()
   } catch (err) {
     pipeline.status = 'error'
+    pipeline.currentSubStep = ''
     pipeline.lastError = err.message
   }
 }
@@ -831,9 +1055,14 @@ const rerunTranscribe = async () => {
 
   pipeline.status = 'running'
   pipeline.lastError = ''
+  pipeline.currentSubStep = 'Re-transcribing audio…'
+  pipeline.stageTimings = { upload: { start: Date.now() } }
+  pipeline.completedAt = null
 
   try {
     const result = await api.retranscribeJob(pipeline.folderName, pipeline.fileName)
+    pipeline.stageTimings.upload.end = Date.now()
+    pipeline.currentSubStep = ''
     pipeline.results = {
       transcription: result.transcript || '',
       summary: '',
@@ -845,6 +1074,7 @@ const rerunTranscribe = async () => {
     pipeline.status = 'idle'
   } catch (err) {
     pipeline.status = 'error'
+    pipeline.currentSubStep = ''
     pipeline.lastError = err.message
     return
   }
@@ -853,6 +1083,10 @@ const rerunTranscribe = async () => {
 }
 
 const rerunSummarize = async () => {
+  // Keep upload timing; fresh summarize and visualize timings will be recorded
+  delete pipeline.stageTimings.summarize
+  delete pipeline.stageTimings.visualize
+  pipeline.completedAt = null
   pipeline.results = {
     ...pipeline.results,
     summary: '',
@@ -864,6 +1098,9 @@ const rerunSummarize = async () => {
 }
 
 const rerunVisualize = async () => {
+  // Keep upload + summarize timings; fresh visualize timing will be recorded
+  delete pipeline.stageTimings.visualize
+  pipeline.completedAt = null
   pipeline.results = {
     ...pipeline.results,
     mindmap_svg: '',
@@ -874,5 +1111,10 @@ const rerunVisualize = async () => {
 
 onMounted(() => {
   recoverPipelineAfterRefresh()
+  timeTickInterval = setInterval(() => {
+    if (pipeline.status === 'running') {
+      currentTime.value = Date.now()
+    }
+  }, 1000)
 })
 </script>
