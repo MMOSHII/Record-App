@@ -799,6 +799,7 @@ const actionSuccess = ref('')
 const transcriptSaveLoading = ref(false)
 const transcriptSaveError = ref('')
 const transcriptDirty = ref(false)
+const transcriptEditVersion = ref(0)
 let transcriptSaveTimer = null
 
 // --- Translate state ---
@@ -996,6 +997,12 @@ const markdownRenderer = new MarkdownIt({
   linkify: true,
   breaks: true
 })
+const defaultValidateLink = markdownRenderer.validateLink.bind(markdownRenderer)
+markdownRenderer.validateLink = (url) => {
+  const normalized = String(url || '').trim().toLowerCase()
+  if (normalized.startsWith('javascript:') || normalized.startsWith('data:') || normalized.startsWith('vbscript:')) return false
+  return defaultValidateLink(url)
+}
 const renderedSummary = computed(() => markdownRenderer.render(detail.value.summary || ''))
 
 // Extract available languages directly from the data
@@ -1045,8 +1052,7 @@ const handleTextEdit = (id, newText) => {
   const item = transcriptData.value.find(d => d._id === id)
   if (item && item.text !== newText) {
     item.text = newText
-    transcriptDirty.value = true
-    scheduleTranscriptSave()
+    markTranscriptDirty()
   }
 }
 
@@ -1060,8 +1066,7 @@ const deleteSegment = (idToDel) => {
         delete speakerSettings.value[sID]
       }
     })
-    transcriptDirty.value = true
-    scheduleTranscriptSave()
+    markTranscriptDirty()
   }
 }
 
@@ -1070,8 +1075,7 @@ const deleteSpeaker = (id) => {
   if (confirm(`Peringatan: Anda akan menghapus permanen ${speakerName} dan SEMUA teksnya dari data. Lanjutkan?`)) {
     transcriptData.value = transcriptData.value.filter(d => String(d.speaker) !== String(id))
     delete speakerSettings.value[id]
-    transcriptDirty.value = true
-    scheduleTranscriptSave()
+    markTranscriptDirty()
   }
 }
 
@@ -1112,12 +1116,15 @@ const resetDashboard = () => {
 
 const persistTranscriptChanges = async () => {
   if (!fileName.value) return
+  const editVersionSnapshot = transcriptEditVersion.value
   transcriptSaveLoading.value = true
   transcriptSaveError.value = ''
   try {
     const payload = transcriptData.value.map(({ _id, ...rest }) => ({ ...rest }))
     await saveTranscript(folderName.value, fileName.value, payload)
-    transcriptDirty.value = false
+    if (editVersionSnapshot === transcriptEditVersion.value) {
+      transcriptDirty.value = false
+    }
     saveCachedDetail()
     if (!selectedLangPair.value) {
       originalTranscriptData.value = transcriptData.value.map(item => ({ ...item }))
@@ -1136,6 +1143,12 @@ const scheduleTranscriptSave = () => {
     transcriptSaveTimer = null
     persistTranscriptChanges()
   }, 700)
+}
+
+const markTranscriptDirty = () => {
+  transcriptEditVersion.value += 1
+  transcriptDirty.value = true
+  scheduleTranscriptSave()
 }
 
 const flushTranscriptSave = async () => {
@@ -1178,6 +1191,7 @@ const resetDetailState = () => {
   activeTranscriptTab.value = 'editor'
   transcriptSaveError.value = ''
   transcriptDirty.value = false
+  transcriptEditVersion.value = 0
   if (transcriptSaveTimer) {
     clearTimeout(transcriptSaveTimer)
     transcriptSaveTimer = null
@@ -1308,7 +1322,7 @@ const runSummarizeDetail = async () => {
   actionSuccess.value = ''
   try {
     await flushTranscriptSave()
-    if (transcriptSaveError.value) throw new Error(transcriptSaveError.value)
+    if (transcriptSaveError.value) throw new Error(`Failed to save transcript changes before summarization: ${transcriptSaveError.value}`)
     await summarizeJob(folderName.value, fileName.value)
     actionSuccess.value = 'Summarization complete. Reloading…'
     await loadDetail()

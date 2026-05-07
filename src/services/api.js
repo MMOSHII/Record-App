@@ -316,8 +316,7 @@ export async function saveTranscript(folderName, fileName, transcriptData) {
   })
 
   if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`Transcript save failed (${response.status}): ${err}`)
+    throw new Error(`Transcript save failed (${response.status})`)
   }
 
   return response.json()
