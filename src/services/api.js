@@ -1,6 +1,50 @@
 import { useAppStore } from '../stores/appStore'
 
 const store = useAppStore()
+const inFlightGetRequests = new Map()
+
+const buildAuthHeaders = (extraHeaders = {}) => {
+  const headers = { ...extraHeaders }
+  if (store.state.token) {
+    headers.Authorization = `Bearer ${store.state.token}`
+  }
+  return headers
+}
+
+const invalidateGetCaches = (...prefixes) => {
+  if (!prefixes.length) {
+    inFlightGetRequests.clear()
+    return
+  }
+  for (const key of Array.from(inFlightGetRequests.keys())) {
+    if (prefixes.some(prefix => key.startsWith(prefix))) {
+      inFlightGetRequests.delete(key)
+    }
+  }
+}
+
+const fetchGetJsonWithDedup = async (cacheKey, endpoint, errorLabel) => {
+  if (inFlightGetRequests.has(cacheKey)) {
+    return inFlightGetRequests.get(cacheKey)
+  }
+
+  const requestPromise = (async () => {
+    const url = `${store.getBaseUrl()}${endpoint}`
+    const response = await fetch(url, { headers: buildAuthHeaders() })
+    if (!response.ok) {
+      const err = await response.text()
+      throw new Error(`${errorLabel} (${response.status}): ${err}`)
+    }
+    return response.json()
+  })()
+
+  inFlightGetRequests.set(cacheKey, requestPromise)
+  try {
+    return await requestPromise
+  } finally {
+    inFlightGetRequests.delete(cacheKey)
+  }
+}
 
 /** Files larger than this threshold are sent via the chunked-upload API. */
 export const LARGE_FILE_THRESHOLD = 10 * 1024 * 1024 // 10 MB
@@ -20,6 +64,7 @@ export async function uploadAndTranscribe(file) {
   const url = `${store.getBaseUrl()}/api/v1/transcribe`
   const response = await fetch(url, {
     method: 'POST',
+    headers: buildAuthHeaders(),
     body: formData
   })
 
@@ -39,7 +84,7 @@ export async function summarizeJob(folderName, fileName) {
   const url = `${store.getBaseUrl()}/api/v1/summarize`
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       google_token:store.state.token,
       folder_name: folderName,
@@ -54,8 +99,9 @@ export async function summarizeJob(folderName, fileName) {
     const err = await response.text()
     throw new Error(`Summarization failed (${response.status}): ${err}`)
   }
-
-  return response.json()
+  const result = await response.json()
+  invalidateGetCaches('history', `job:${folderName}`)
+  return result
 }
 
 /**
@@ -66,7 +112,7 @@ export async function visualizeJob(folderName, fileName) {
   const url = `${store.getBaseUrl()}/api/v1/visualize`
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       google_token:store.state.token,
       folder_name: folderName,
@@ -81,8 +127,9 @@ export async function visualizeJob(folderName, fileName) {
     const err = await response.text()
     throw new Error(`Visualization failed (${response.status}): ${err}`)
   }
-
-  return response.json()
+  const result = await response.json()
+  invalidateGetCaches('history', `job:${folderName}`)
+  return result
 }
 
 /**
@@ -90,15 +137,11 @@ export async function visualizeJob(folderName, fileName) {
  * GET /api/v1/job/{folder_name}
  */
 export async function getJob(folderName) {
-  const url = store.getAuthUrl(`/api/v1/job/${encodeURIComponent(folderName)}`)
-  const response = await fetch(url)
-
-  if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`Job fetch failed (${response.status}): ${err}`)
-  }
-
-  return response.json()
+  return fetchGetJsonWithDedup(
+    `job:${folderName}`,
+    `/api/v1/job/${encodeURIComponent(folderName)}`,
+    'Job fetch failed'
+  )
 }
 
 /**
@@ -106,15 +149,7 @@ export async function getJob(folderName) {
  * GET /api/v1/history
  */
 export async function getHistory() {
-  const url = store.getAuthUrl('/api/v1/history')
-  const response = await fetch(url)
-
-  if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`History fetch failed (${response.status}): ${err}`)
-  }
-
-  return response.json()
+  return fetchGetJsonWithDedup('history', '/api/v1/history', 'History fetch failed')
 }
 
 /**
@@ -137,7 +172,7 @@ export async function initChunkedUpload(filename, totalChunks, fileSize, transcr
   const url = `${store.getBaseUrl()}/api/v1/upload/init`
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       google_token: store.state.token,
       filename,
@@ -169,6 +204,7 @@ export async function uploadChunk(uploadId, chunkIndex, chunkBlob) {
   const url = `${store.getBaseUrl()}/api/v1/upload/chunk`
   const response = await fetch(url, {
     method: 'POST',
+    headers: buildAuthHeaders(),
     body: formData
   })
 
@@ -185,15 +221,11 @@ export async function uploadChunk(uploadId, chunkIndex, chunkBlob) {
  * GET /api/v1/upload/status/{upload_id}
  */
 export async function getUploadStatus(uploadId) {
-  const url = store.getAuthUrl(`/api/v1/upload/status/${encodeURIComponent(uploadId)}`)
-  const response = await fetch(url)
-
-  if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`Upload status check failed (${response.status}): ${err}`)
-  }
-
-  return response.json()
+  return fetchGetJsonWithDedup(
+    `upload:${uploadId}`,
+    `/api/v1/upload/status/${encodeURIComponent(uploadId)}`,
+    'Upload status check failed'
+  )
 }
 
 /**
@@ -204,7 +236,7 @@ export async function completeChunkedUpload(uploadId, transcribeLang) {
   const url = `${store.getBaseUrl()}/api/v1/upload/complete`
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       google_token: store.state.token,
       upload_id: uploadId,
@@ -216,8 +248,9 @@ export async function completeChunkedUpload(uploadId, transcribeLang) {
     const err = await response.text()
     throw new Error(`Upload complete failed (${response.status}): ${err}`)
   }
-
-  return response.json()
+  const result = await response.json()
+  invalidateGetCaches('history')
+  return result
 }
 
 /**
@@ -228,7 +261,7 @@ export async function retranscribeJob(folderName, fileName, transcribeLang) {
   const url = `${store.getBaseUrl()}/api/v1/retranscribe`
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       google_token: store.state.token,
       folder_name: folderName,
@@ -241,8 +274,9 @@ export async function retranscribeJob(folderName, fileName, transcribeLang) {
     const err = await response.text()
     throw new Error(`Re-transcription failed (${response.status}): ${err}`)
   }
-
-  return response.json()
+  const result = await response.json()
+  invalidateGetCaches('history', `job:${folderName}`)
+  return result
 }
 
 /**
@@ -254,7 +288,7 @@ export async function deleteJobs(folderNames) {
   const url = `${store.getBaseUrl()}/api/v1/history/delete`
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       google_token: store.state.token,
       folder_names: folderNames
@@ -266,7 +300,9 @@ export async function deleteJobs(folderNames) {
     throw new Error(`Delete failed (${response.status}): ${err}`)
   }
 
-  return response.json()
+  const result = await response.json()
+  invalidateGetCaches('history', 'job:')
+  return result
 }
 
 /**
@@ -278,7 +314,7 @@ export async function translateJob(folderName, fileName, sourceLang, targetLang,
   const url = `${store.getBaseUrl()}/api/v1/translate`
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       google_token: store.state.token,
       folder_name: folderName,
@@ -294,7 +330,9 @@ export async function translateJob(folderName, fileName, sourceLang, targetLang,
     throw new Error(`Translation failed (${response.status}): ${err}`)
   }
 
-  return response.json()
+  const result = await response.json()
+  invalidateGetCaches(`job:${folderName}`)
+  return result
 }
 
 /**
@@ -306,7 +344,7 @@ export async function saveTranscript(folderName, fileName, transcriptData) {
   const url = `${store.getBaseUrl()}/api/v1/transcript/save`
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       google_token: store.state.token,
       folder_name: folderName,
@@ -319,7 +357,9 @@ export async function saveTranscript(folderName, fileName, transcriptData) {
     throw new Error(`Transcript save failed (${response.status})`)
   }
 
-  return response.json()
+  const result = await response.json()
+  invalidateGetCaches(`job:${folderName}`)
+  return result
 }
 
 /**
@@ -333,7 +373,7 @@ export async function generateFlashcards(folderName, fileName, count = 10) {
   const url = `${store.getBaseUrl()}/api/v1/flashcards`
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       google_token: store.state.token,
       folder_name: folderName,
@@ -365,7 +405,7 @@ export async function sendChatMessage(folderName, fileName, question, history = 
   const url = `${store.getBaseUrl()}/api/v1/chat`
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       google_token: store.state.token,
       folder_name: folderName,
