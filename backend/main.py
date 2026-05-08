@@ -155,8 +155,8 @@ def _build_cors_config() -> Dict[str, Any]:
     if not origins:
         origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
     app_env = os.getenv("APP_ENV", "").strip().lower()
-    if app_env == "production" and "*" in origins:
-        raise RuntimeError("CORS wildcard origin is not allowed in production.")
+    if app_env == "production" and any("*" in origin for origin in origins):
+        raise RuntimeError("CORS wildcard origins are not allowed in production.")
     return {
         "allow_origins": origins,
         "allow_credentials": True,
