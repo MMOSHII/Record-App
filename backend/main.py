@@ -1868,7 +1868,7 @@ async def job_details(
     user_id = _resolve_user_from_auth(google_token=google_token, authorization=authorization)
     job_dir = _safe_join(BASE_DIR, user_id, _sanitize_name(folder_name, "folder_name"))
     manifest = _read_manifest(job_dir)
-    detected_source_language = "Indonesian"
+    detected_source_language = ""
     file_name = manifest.get("file_name")
     if file_name:
         detected_source_language = _detect_job_language(job_dir, file_name)

@@ -301,7 +301,7 @@ export async function deleteJobs(folderNames) {
   }
 
   const result = await response.json()
-  invalidateGetCaches('history', 'job:')
+  invalidateGetCaches('history')
   return result
 }
 
