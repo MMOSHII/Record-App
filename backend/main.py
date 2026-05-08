@@ -21,6 +21,7 @@ import shutil
 import traceback
 import contextlib
 import datetime
+import logging
 import ffmpeg
 from dotenv import load_dotenv
 from filelock import FileLock, Timeout
@@ -81,6 +82,7 @@ _ESTIMATE_RATES: Dict[str, float] = {
 }
 
 _CLOUD_PROVIDERS = {"openai", "anthropic", "groq", "google", "gemini"}
+logger = logging.getLogger(__name__)
 
 _COMMON_HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 _DEFAULT_DEV_CORS_ORIGINS = [
@@ -174,9 +176,9 @@ def _parse_csv_env(var_name: str, default: List[str]) -> List[str]:
     """Parse comma-separated env values and trim whitespace."""
     raw = os.getenv(var_name)
     if raw is None or not raw.strip():
-        return default.copy()
+        return list(default)
     parsed = [item.strip() for item in raw.split(",") if item.strip()]
-    if not parsed and default:
+    if not parsed:
         raise ValueError(f"{var_name} must contain at least one non-empty value.")
     return parsed
 
@@ -188,7 +190,8 @@ def _build_cors_config() -> Dict[str, Any]:
     This keeps CORS strict by default in production and convenient in
     development.  In production, wildcard origins are explicitly rejected.
     """
-    app_env = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "development")).strip().lower()
+    # APP_ENV takes precedence over ENVIRONMENT when both are present.
+    app_env = (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT") or "development").strip().lower()
     is_production = app_env in {"production", "prod"}
 
     try:
@@ -206,7 +209,7 @@ def _build_cors_config() -> Dict[str, Any]:
             raise ValueError("CORS_MAX_AGE must be >= 0.")
 
         # OPTIONS is required for browser preflight checks.
-        if "OPTIONS" not in {method.upper() for method in allow_methods}:
+        if not any(method.upper() == "OPTIONS" for method in allow_methods):
             allow_methods.append("OPTIONS")
 
         # Prevent insecure/invalid credential + wildcard configuration.
@@ -219,10 +222,8 @@ def _build_cors_config() -> Dict[str, Any]:
                 )
 
         if not origins:
-            print(
-                "[WARN] CORS is enabled with no allowed origins; browser cross-origin requests "
-                "will be blocked.",
-                flush=True,
+            logger.warning(
+                "CORS is enabled with no allowed origins; browser cross-origin requests will be blocked."
             )
 
         return {
@@ -238,9 +239,9 @@ def _build_cors_config() -> Dict[str, Any]:
         if is_production:
             raise RuntimeError(f"Invalid production CORS configuration: {exc}") from exc
 
-        print(
-            f"[WARN] Invalid CORS configuration ({exc}). Falling back to safe development defaults.",
-            flush=True,
+        logger.warning(
+            "Invalid CORS configuration (%s). Falling back to safe development defaults.",
+            exc,
         )
         return {
             "allow_origins": _DEFAULT_DEV_CORS_ORIGINS,
