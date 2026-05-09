@@ -192,7 +192,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '../stores/appStore'
-import { getHistory } from '../services/api.js'
+import { getHistory, GET_CACHE_TTL_MS } from '../services/api.js'
 import { useI18n } from '../i18n/index.js'
 
 const store = useAppStore()
@@ -278,7 +278,7 @@ const loadHistory = async () => {
   loading.value = true
   error.value = ''
   try {
-    const result = await getHistory()
+    const result = await getHistory({ cacheTtlMs: GET_CACHE_TTL_MS.HISTORY })
     const normalized = Array.isArray(result) ? result : (result.jobs || result.data || [])
     jobs.value = normalized
     store.state.historyCache = normalized

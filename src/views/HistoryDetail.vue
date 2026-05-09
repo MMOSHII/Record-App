@@ -659,7 +659,7 @@ import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
-import { getJob, getDownloadUrl, fetchDownloadText, fetchDownloadJson, summarizeJob, visualizeJob, translateJob, saveTranscript, generateFlashcards, sendChatMessage } from '../services/api'
+import { getJob, getDownloadUrl, fetchDownloadText, fetchDownloadJson, summarizeJob, visualizeJob, translateJob, saveTranscript, generateFlashcards, sendChatMessage, GET_CACHE_TTL_MS } from '../services/api'
 import { createRequestCanceller } from '../services/httpClient'
 import { useAppStore } from '../stores/appStore'
 import { useI18n } from '../i18n/index.js'
@@ -1238,7 +1238,7 @@ const loadDetail = async () => {
   if (cached) applyCachedDetail(cached)
   
   try {
-    const jobDetail = await getJob(folderName.value, { signal })
+    const jobDetail = await getJob(folderName.value, { signal, cacheTtlMs: GET_CACHE_TTL_MS.JOB })
     manifest.value = jobDetail
     const files = jobDetail?.files || {}
 

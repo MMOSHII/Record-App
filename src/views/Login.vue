@@ -16,7 +16,7 @@
       <div class="flex rounded-xl bg-slate-100 p-1 mb-6">
         <button
           class="flex-1 py-2 text-sm font-semibold rounded-lg transition"
-          :class="tab === 'basic' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+          :class="tab === 'basic' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-700 hover:text-slate-900'"
           @click="tab = 'basic'"
           :aria-pressed="tab === 'basic'"
         >
@@ -24,7 +24,7 @@
         </button>
         <button
           class="flex-1 py-2 text-sm font-semibold rounded-lg transition"
-          :class="tab === 'api' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+          :class="tab === 'api' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-700 hover:text-slate-900'"
           @click="tab = 'api'"
           :aria-pressed="tab === 'api'"
         >
@@ -66,7 +66,7 @@
                 type="button"
                 @click="showPassword = !showPassword"
                 :aria-label="showPassword ? 'Hide password' : 'Show password'"
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-semibold"
+                class="absolute right-1.5 top-1/2 -translate-y-1/2 min-h-9 min-w-9 px-1 rounded-md flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 text-xs font-semibold transition"
               >
                 {{ showPassword ? t('signup.hide') : t('signup.show') }}
               </button>
@@ -114,7 +114,7 @@
           </div> -->
 
           <div class="flex justify-center">
-            <div id="google-btn-container" class="w-full flex justify-center" aria-label="Google sign in button container" />
+            <div id="google-btn-container" class="w-full flex justify-center" />
           </div>
         </div>
       </div>

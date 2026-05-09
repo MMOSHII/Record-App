@@ -9,7 +9,7 @@ const CACHE_KEY_PREFIX = {
   UPLOAD: 'upload:',
   HISTORY: 'history'
 }
-const GET_CACHE_TTL_MS = {
+export const GET_CACHE_TTL_MS = {
   HISTORY: 30_000,
   JOB: 20_000,
   UPLOAD: 5_000
@@ -198,7 +198,7 @@ export async function getJob(folderName, options = {}) {
     `${CACHE_KEY_PREFIX.JOB}${folderName}`,
     `/api/v1/job/${encodeURIComponent(folderName)}`,
     'Job fetch failed',
-    { ...options, cacheTtlMs: options.cacheTtlMs ?? GET_CACHE_TTL_MS.JOB }
+    options
   )
 }
 
@@ -207,10 +207,7 @@ export async function getJob(folderName, options = {}) {
  * GET /api/v1/history
  */
 export async function getHistory(options = {}) {
-  return fetchGetJsonWithDedup(CACHE_KEY_PREFIX.HISTORY, '/api/v1/history', 'History fetch failed', {
-    ...options,
-    cacheTtlMs: options.cacheTtlMs ?? GET_CACHE_TTL_MS.HISTORY
-  })
+  return fetchGetJsonWithDedup(CACHE_KEY_PREFIX.HISTORY, '/api/v1/history', 'History fetch failed', options)
 }
 
 /**
@@ -269,7 +266,7 @@ export async function getUploadStatus(uploadId, options = {}) {
     `${CACHE_KEY_PREFIX.UPLOAD}${uploadId}`,
     `/api/v1/upload/status/${encodeURIComponent(uploadId)}`,
     'Upload status check failed',
-    { ...options, cacheTtlMs: options.cacheTtlMs ?? GET_CACHE_TTL_MS.UPLOAD }
+    options
   )
 }
 
