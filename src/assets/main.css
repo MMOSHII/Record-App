@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :focus-visible {
+    @apply outline-none ring-2 ring-indigo-600 ring-offset-2;
+  }
+}
+
 @layer components {
   .slide-left-enter-active,
   .slide-right-enter-active {
@@ -27,5 +33,12 @@
 
   .slide-right-leave-to {
     @apply opacity-0 translate-x-6;
+  }
+}
+
+@layer utilities {
+  /* Lift commonly used helper text to accessible contrast against white backgrounds. */
+  .text-slate-400 {
+    color: rgb(100 116 139 / var(--tw-text-opacity, 1));
   }
 }

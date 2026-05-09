@@ -3,10 +3,21 @@ import { requestJson, requestText } from './httpClient'
 
 const store = useAppStore()
 const inFlightGetRequests = new Map()
+const responseCache = new Map()
 const CACHE_KEY_PREFIX = {
   JOB: 'job:',
   UPLOAD: 'upload:',
   HISTORY: 'history'
+}
+const GET_CACHE_TTL_MS = {
+  HISTORY: 30_000,
+  JOB: 20_000,
+  UPLOAD: 5_000
+}
+
+const cloneCachedPayload = (payload) => {
+  if (typeof structuredClone === 'function') return structuredClone(payload)
+  return JSON.parse(JSON.stringify(payload))
 }
 
 const buildAuthHeaders = (extraHeaders = {}) => {
@@ -30,7 +41,13 @@ const getModelPayload = () => ({
 const invalidateGetCaches = (...prefixes) => {
   if (!prefixes.length) {
     inFlightGetRequests.clear()
+    responseCache.clear()
     return
+  }
+  for (const key of Array.from(responseCache.keys())) {
+    if (prefixes.some(prefix => key.startsWith(prefix))) {
+      responseCache.delete(key)
+    }
   }
   for (const key of Array.from(inFlightGetRequests.keys())) {
     if (prefixes.some(prefix => key.startsWith(prefix))) {
@@ -51,6 +68,15 @@ const postJson = (endpoint, payload, errorLabel, options = {}) =>
   })
 
 const fetchGetJsonWithDedup = async (cacheKey, endpoint, errorLabel, options = {}) => {
+  const ttlMs = Number.isFinite(options.cacheTtlMs) ? options.cacheTtlMs : 0
+  if (ttlMs > 0 && responseCache.has(cacheKey)) {
+    const entry = responseCache.get(cacheKey)
+    if (Date.now() < entry.expiresAt) {
+      return cloneCachedPayload(entry.payload)
+    }
+    responseCache.delete(cacheKey)
+  }
+
   if (inFlightGetRequests.has(cacheKey)) {
     return inFlightGetRequests.get(cacheKey)
   }
@@ -66,7 +92,14 @@ const fetchGetJsonWithDedup = async (cacheKey, endpoint, errorLabel, options = {
 
   inFlightGetRequests.set(cacheKey, requestPromise)
   try {
-    return await requestPromise
+    const payload = await requestPromise
+    if (ttlMs > 0) {
+      responseCache.set(cacheKey, {
+        payload,
+        expiresAt: Date.now() + ttlMs
+      })
+    }
+    return payload
   } finally {
     inFlightGetRequests.delete(cacheKey)
   }
@@ -165,7 +198,7 @@ export async function getJob(folderName, options = {}) {
     `${CACHE_KEY_PREFIX.JOB}${folderName}`,
     `/api/v1/job/${encodeURIComponent(folderName)}`,
     'Job fetch failed',
-    options
+    { ...options, cacheTtlMs: options.cacheTtlMs ?? GET_CACHE_TTL_MS.JOB }
   )
 }
 
@@ -174,7 +207,10 @@ export async function getJob(folderName, options = {}) {
  * GET /api/v1/history
  */
 export async function getHistory(options = {}) {
-  return fetchGetJsonWithDedup(CACHE_KEY_PREFIX.HISTORY, '/api/v1/history', 'History fetch failed', options)
+  return fetchGetJsonWithDedup(CACHE_KEY_PREFIX.HISTORY, '/api/v1/history', 'History fetch failed', {
+    ...options,
+    cacheTtlMs: options.cacheTtlMs ?? GET_CACHE_TTL_MS.HISTORY
+  })
 }
 
 /**
@@ -233,7 +269,7 @@ export async function getUploadStatus(uploadId, options = {}) {
     `${CACHE_KEY_PREFIX.UPLOAD}${uploadId}`,
     `/api/v1/upload/status/${encodeURIComponent(uploadId)}`,
     'Upload status check failed',
-    options
+    { ...options, cacheTtlMs: options.cacheTtlMs ?? GET_CACHE_TTL_MS.UPLOAD }
   )
 }
 
