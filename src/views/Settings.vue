@@ -356,6 +356,7 @@ const API_USER_ROLE = 'api user'
 const GITHUB_CONTRIBUTORS_URL = 'https://api.github.com/repos/Hadi-Univ/Record-App/contributors'
 const GITHUB_API_TIMEOUT_MS = 5000
 const CONTRIBUTORS_CACHE_KEY = 'record_app_contributors_cache_v1'
+// 7 days in milliseconds.
 const CONTRIBUTORS_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 const showApiKey = ref(false)
