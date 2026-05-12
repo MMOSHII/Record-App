@@ -727,7 +727,7 @@ const formatTimestamp = (ts) => {
 const canStartPipeline = computed(() =>
   inputMode.value === 'upload' ? !!selectedFile.value : !!audioBlob.value
 )
-const isPipelineLocked = computed(() => Boolean(pipeline.isProcessing))
+const isPipelineLocked = computed(() => pipeline.isProcessing)
 
 const beginProcessingLock = () => {
   pipeline.isProcessing = true

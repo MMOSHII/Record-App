@@ -356,8 +356,7 @@ const API_USER_ROLE = 'api user'
 const GITHUB_CONTRIBUTORS_URL = 'https://api.github.com/repos/Hadi-Univ/Record-App/contributors'
 const GITHUB_API_TIMEOUT_MS = 5000
 const CONTRIBUTORS_CACHE_KEY = 'record_app_contributors_cache_v1'
-// 7 days in milliseconds.
-const CONTRIBUTORS_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const CONTRIBUTORS_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds.
 
 const showApiKey = ref(false)
 const testing = ref(false)
@@ -458,17 +457,17 @@ const normalizeContributors = (data) => {
     : []
 }
 
-const loadFreshContributorsCache = () => {
+const loadCachedContributors = ({ requireFresh = false } = {}) => {
   const cached = readContributorsCache()
   if (!cached) return false
-  if (Date.now() - cached.fetchedAt > CONTRIBUTORS_CACHE_TTL_MS) return false
+  if (requireFresh && Date.now() - cached.fetchedAt > CONTRIBUTORS_CACHE_TTL_MS) return false
   contributors.value = normalizeContributors(cached.data)
   contributorsError.value = ''
   return true
 }
 
 const fetchContributors = async ({ force = false } = {}) => {
-  if (!force && loadFreshContributorsCache()) {
+  if (!force && loadCachedContributors({ requireFresh: true })) {
     contributorsLoading.value = false
     return
   }
@@ -490,10 +489,7 @@ const fetchContributors = async ({ force = false } = {}) => {
     if (signal.aborted) {
       return
     }
-    const cached = readContributorsCache()
-    if (cached?.data?.length) {
-      contributors.value = normalizeContributors(cached.data)
-      contributorsError.value = ''
+    if (loadCachedContributors()) {
       return
     }
     if (err?.name === 'TimeoutError' || err?.message?.toLowerCase?.().includes('timed out')) {
