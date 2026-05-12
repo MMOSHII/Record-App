@@ -467,13 +467,13 @@ const loadCachedContributors = ({ requireFresh = false } = {}) => {
 }
 
 const fetchContributors = async ({ force = false } = {}) => {
+  contributorsLoading.value = true
   if (!force && loadCachedContributors({ requireFresh: true })) {
     contributorsLoading.value = false
     return
   }
 
   const signal = requestCanceller.nextSignal('contributors')
-  contributorsLoading.value = true
   contributorsError.value = ''
   try {
     const data = await requestJson(GITHUB_CONTRIBUTORS_URL, {
