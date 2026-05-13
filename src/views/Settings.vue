@@ -462,9 +462,9 @@ const handleUpdateProfile = async () => {
     })
     profileEmail.value = store.state.user?.email || profileEmail.value
     profileUsername.value = store.state.user?.username || profileUsername.value
-    profileStatus.value = { ok: true, message: 'Account details updated.' }
+    profileStatus.value = { ok: true, message: 'Profile updated successfully.' }
   } catch (err) {
-    profileStatus.value = { ok: false, message: err.message || 'Failed to update account details.' }
+    profileStatus.value = { ok: false, message: err.message || 'Failed to update profile.' }
   } finally {
     updatingProfile.value = false
   }

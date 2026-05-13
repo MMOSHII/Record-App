@@ -47,6 +47,7 @@ USERNAME_MIN_LENGTH = 3
 USERNAME_MAX_LENGTH = 30
 USERNAME_REGEX = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]{1,28}[A-Za-z0-9])?$")
 USERNAME_CHANGE_COOLDOWN_DAYS = 30
+SECONDS_PER_DAY = 86400
 
 def _check_jwt_secret() -> None:
     """
@@ -136,7 +137,8 @@ def init_db() -> None:
             normalized_username = (row["username_normalized"] or "").strip().lower()
             if raw_username and normalized_username:
                 continue
-            fallback_username = raw_username or row["email"].split("@")[0] or row["name"] or "user"
+            safe_email = str(row["email"] or "")
+            fallback_username = raw_username or safe_email.split("@")[0] or row["name"] or "user"
             unique_username = _generate_unique_username(conn, fallback_username, exclude_user_id=row["id"])
             conn.execute(
                 """
@@ -179,8 +181,18 @@ def _normalize_email(email: str) -> str:
     return email.lower().strip()
 
 
+def _parse_iso_datetime(value: str) -> datetime:
+    normalized = str(value or "").strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def _username_seed(value: str) -> str:
-    normalized = "".join(ch.lower() if ch.isalnum() else "_" for ch in value.strip())
+    normalized = "".join(ch.lower() if (ch.isalnum() or ch in "._-") else "_" for ch in value.strip())
     normalized = re.sub(r"_+", "_", normalized).strip("_.-")
     if len(normalized) < USERNAME_MIN_LENGTH:
         normalized = "user"
@@ -227,7 +239,10 @@ def _generate_unique_username(conn: sqlite3.Connection, seed_value: str, exclude
     suffix = 1
     while _username_exists(conn, candidate.lower(), exclude_user_id=exclude_user_id):
         suffix_text = str(suffix)
-        trimmed = base[: max(USERNAME_MIN_LENGTH, USERNAME_MAX_LENGTH - len(suffix_text) - 1)]
+        max_base_length = USERNAME_MAX_LENGTH - len(suffix_text) - 1
+        if max_base_length < USERNAME_MIN_LENGTH:
+            max_base_length = USERNAME_MIN_LENGTH
+        trimmed = base[:max_base_length]
         candidate = f"{trimmed}_{suffix_text}"
         suffix += 1
     return candidate
@@ -372,12 +387,13 @@ def update_basic_profile(
                 last_updated_at = current.get("username_updated_at")
                 if last_updated_at:
                     try:
-                        previous_update = datetime.fromisoformat(last_updated_at.replace("Z", "+00:00"))
+                        previous_update = _parse_iso_datetime(last_updated_at)
                     except ValueError:
                         previous_update = datetime.now(timezone.utc) - timedelta(days=USERNAME_CHANGE_COOLDOWN_DAYS + 1)
                     cooldown_end = previous_update + timedelta(days=USERNAME_CHANGE_COOLDOWN_DAYS)
                     if datetime.now(timezone.utc) < cooldown_end:
-                        remaining_days = max(1, int((cooldown_end - datetime.now(timezone.utc)).days + 1))
+                        remaining_seconds = max(0, (cooldown_end - datetime.now(timezone.utc)).total_seconds())
+                        remaining_days = max(1, int((remaining_seconds + (SECONDS_PER_DAY - 1)) // SECONDS_PER_DAY))
                         raise HTTPException(
                             status_code=429,
                             detail=f"Username can only be changed every {USERNAME_CHANGE_COOLDOWN_DAYS} days. Try again in {remaining_days} day(s).",

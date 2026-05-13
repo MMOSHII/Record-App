@@ -111,7 +111,6 @@ _DISALLOWED_VIDEO_EXTENSIONS = {
     "mkv",
     "mpeg",
     "mpg",
-    "webmvideo",
 }
 
 # Files produced per job folder:

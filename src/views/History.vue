@@ -388,7 +388,7 @@ const syncSingleHistoryDetail = async (job) => {
 
   const [summaryResult, transcriptJsonResult, transcriptTextResult] = await Promise.allSettled([
     files.summary_txt ? fetchDownloadText(folderName, 'summary_txt', { errorLabel: 'Failed to sync summary' }) : Promise.resolve(''),
-    files.transcript_json ? fetchDownloadJson(folderName, 'transcript_json', { errorLabel: 'Failed to sync transcript json' }) : Promise.resolve([]),
+    files.transcript_json ? fetchDownloadJson(folderName, 'transcript_json', { errorLabel: 'Failed to sync transcript JSON' }) : Promise.resolve([]),
     files.transcript_txt ? fetchDownloadText(folderName, 'transcript_txt', { errorLabel: 'Failed to sync transcript text' }) : Promise.resolve('')
   ])
 
@@ -410,8 +410,10 @@ const syncHistoryDetailsForOffline = async (historyJobs = []) => {
   if (!Array.isArray(historyJobs) || !historyJobs.length) return
   syncingOfflineCache.value = true
   try {
-    for (const job of historyJobs) {
-      await syncSingleHistoryDetail(job)
+    const batchSize = 4
+    for (let i = 0; i < historyJobs.length; i += batchSize) {
+      const batch = historyJobs.slice(i, i + batchSize)
+      await Promise.allSettled(batch.map(job => syncSingleHistoryDetail(job)))
     }
   } catch {
     // Keep history page usable if background sync fails.
