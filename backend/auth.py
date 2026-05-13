@@ -17,6 +17,7 @@ import sqlite3
 import secrets
 import smtplib
 import traceback
+import re
 from dotenv import load_dotenv
 from email.message import EmailMessage
 from datetime import datetime, timezone, timedelta
@@ -42,6 +43,10 @@ REFRESH_TOKEN_EXPIRES_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRES_DAYS", "9
 
 # Convenience: access-token lifetime in seconds, used in API responses.
 JWT_EXPIRES_SECONDS: int = JWT_EXPIRES_HOURS * 3600
+USERNAME_MIN_LENGTH = 3
+USERNAME_MAX_LENGTH = 30
+USERNAME_REGEX = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]{1,28}[A-Za-z0-9])?$")
+USERNAME_CHANGE_COOLDOWN_DAYS = 30
 
 def _check_jwt_secret() -> None:
     """
@@ -95,6 +100,9 @@ def init_db() -> None:
                 id               TEXT PRIMARY KEY,
                 name             TEXT NOT NULL,
                 email            TEXT NOT NULL UNIQUE,
+                username         TEXT,
+                username_normalized TEXT,
+                username_updated_at TEXT,
                 hashed_password  TEXT NOT NULL,
                 created_at       TEXT NOT NULL
             )
@@ -108,6 +116,45 @@ def init_db() -> None:
                 expires_at REAL NOT NULL
             )
             """
+        )
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "username" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN username TEXT")
+        if "username_normalized" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN username_normalized TEXT")
+        if "username_updated_at" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN username_updated_at TEXT")
+
+        rows = conn.execute(
+            """
+            SELECT id, name, email, created_at, username, username_normalized, username_updated_at
+            FROM users
+            """
+        ).fetchall()
+        for row in rows:
+            raw_username = (row["username"] or "").strip()
+            normalized_username = (row["username_normalized"] or "").strip().lower()
+            if raw_username and normalized_username:
+                continue
+            fallback_username = raw_username or row["email"].split("@")[0] or row["name"] or "user"
+            unique_username = _generate_unique_username(conn, fallback_username, exclude_user_id=row["id"])
+            conn.execute(
+                """
+                UPDATE users
+                SET username = ?, username_normalized = ?, username_updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    unique_username,
+                    unique_username.lower(),
+                    row["username_updated_at"] or row["created_at"] or _now_iso(),
+                    row["id"],
+                ),
+            )
+
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(email)")
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_norm_unique ON users(username_normalized)"
         )
         conn.execute(
             """
@@ -128,11 +175,73 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _normalize_email(email: str) -> str:
+    return email.lower().strip()
+
+
+def _username_seed(value: str) -> str:
+    normalized = "".join(ch.lower() if ch.isalnum() else "_" for ch in value.strip())
+    normalized = re.sub(r"_+", "_", normalized).strip("_.-")
+    if len(normalized) < USERNAME_MIN_LENGTH:
+        normalized = "user"
+    if not normalized or not normalized[0].isalnum():
+        normalized = f"user_{normalized}" if normalized else "user"
+    normalized = normalized[:USERNAME_MAX_LENGTH]
+    while normalized and not normalized[-1].isalnum():
+        normalized = normalized[:-1]
+    return normalized or "user"
+
+
+def validate_username(username: str) -> tuple[str, str]:
+    clean = (username or "").strip()
+    if not (USERNAME_MIN_LENGTH <= len(clean) <= USERNAME_MAX_LENGTH):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Username must be {USERNAME_MIN_LENGTH}-{USERNAME_MAX_LENGTH} characters.",
+        )
+    if not USERNAME_REGEX.fullmatch(clean):
+        raise HTTPException(
+            status_code=400,
+            detail="Username may only contain letters, numbers, dots, underscores, and hyphens, and must start/end with a letter or number.",
+        )
+    return clean, clean.lower()
+
+
+def _username_exists(conn: sqlite3.Connection, normalized_username: str, exclude_user_id: Optional[str] = None) -> bool:
+    if exclude_user_id:
+        row = conn.execute(
+            "SELECT 1 FROM users WHERE username_normalized = ? AND id != ? LIMIT 1",
+            (normalized_username, exclude_user_id),
+        ).fetchone()
+        return row is not None
+    row = conn.execute(
+        "SELECT 1 FROM users WHERE username_normalized = ? LIMIT 1",
+        (normalized_username,),
+    ).fetchone()
+    return row is not None
+
+
+def _generate_unique_username(conn: sqlite3.Connection, seed_value: str, exclude_user_id: Optional[str] = None) -> str:
+    base = _username_seed(seed_value)
+    candidate = base
+    suffix = 1
+    while _username_exists(conn, candidate.lower(), exclude_user_id=exclude_user_id):
+        suffix_text = str(suffix)
+        trimmed = base[: max(USERNAME_MIN_LENGTH, USERNAME_MAX_LENGTH - len(suffix_text) - 1)]
+        candidate = f"{trimmed}_{suffix_text}"
+        suffix += 1
+    return candidate
+
+
 def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
     with _get_conn() as conn:
         row = conn.execute(
-            "SELECT id, name, email, hashed_password FROM users WHERE email = ?",
-            (email.lower().strip(),),
+            """
+            SELECT id, name, email, username, username_normalized, username_updated_at, hashed_password
+            FROM users
+            WHERE email = ?
+            """,
+            (_normalize_email(email),),
         ).fetchone()
     return dict(row) if row else None
 
@@ -140,29 +249,57 @@ def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
 def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
     with _get_conn() as conn:
         row = conn.execute(
-            "SELECT id, name, email FROM users WHERE id = ?",
+            "SELECT id, name, email, username, username_updated_at FROM users WHERE id = ?",
             (user_id,),
         ).fetchone()
     return dict(row) if row else None
 
 
-def create_user(name: str, email: str, password: str) -> Dict[str, Any]:
+def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
+    normalized = (username or "").strip().lower()
+    if not normalized:
+        return None
+    with _get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT id, name, email, username, username_normalized, username_updated_at, hashed_password
+            FROM users
+            WHERE username_normalized = ?
+            """,
+            (normalized,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def create_user(name: str, email: str, password: str, username: Optional[str] = None) -> Dict[str, Any]:
     """
     Register a new user.  Raises HTTPException 409 if email already exists.
     Returns the new user dict (without hashed_password).
     """
-    email = email.lower().strip()
+    email = _normalize_email(email)
     if get_user_by_email(email):
         raise HTTPException(status_code=409, detail="An account with this email already exists.")
 
     user_id = f"basic_{uuid.uuid4().hex}"
     hashed = pwd_context.hash(password)
+    now_iso = _now_iso()
     with _get_conn() as conn:
+        if username and username.strip():
+            clean_username, normalized_username = validate_username(username)
+            if _username_exists(conn, normalized_username):
+                raise HTTPException(status_code=409, detail="Username is already taken.")
+        else:
+            clean_username = _generate_unique_username(conn, email.split("@")[0] or name)
+            normalized_username = clean_username.lower()
         conn.execute(
-            "INSERT INTO users (id, name, email, hashed_password, created_at) VALUES (?, ?, ?, ?, ?)",
-            (user_id, name.strip(), email, hashed, _now_iso()),
+            """
+            INSERT INTO users (
+                id, name, email, username, username_normalized, username_updated_at, hashed_password, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (user_id, name.strip(), email, clean_username, normalized_username, now_iso, hashed, now_iso),
         )
-    return {"id": user_id, "name": name.strip(), "email": email}
+    return {"id": user_id, "name": name.strip(), "email": email, "username": clean_username}
 
 
 def verify_password(plain: str, hashed: str) -> bool:
@@ -176,6 +313,97 @@ def update_password(user_id: str, new_password: str) -> None:
             "UPDATE users SET hashed_password = ? WHERE id = ?",
             (hashed, user_id),
         )
+
+
+def authenticate_basic_user(identifier: str, password: str) -> Dict[str, Any]:
+    clean_identifier = (identifier or "").strip()
+    if not clean_identifier:
+        raise HTTPException(status_code=401, detail="Incorrect email/username or password.")
+    user = (
+        get_user_by_email(clean_identifier)
+        if "@" in clean_identifier
+        else get_user_by_username(clean_identifier)
+    )
+    if not user or not verify_password(password, user["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Incorrect email/username or password.")
+    return user
+
+
+def update_basic_profile(
+    user_id: str,
+    *,
+    email: Optional[str] = None,
+    username: Optional[str] = None,
+) -> Dict[str, Any]:
+    with _get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT id, name, email, username, username_normalized, username_updated_at
+            FROM users
+            WHERE id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found.")
+
+        current = dict(row)
+        next_email = current["email"]
+        if email is not None:
+            candidate_email = _normalize_email(email)
+            if not candidate_email:
+                raise HTTPException(status_code=400, detail="Email is required.")
+            if candidate_email != current["email"]:
+                existing_email_user = conn.execute(
+                    "SELECT id FROM users WHERE email = ?",
+                    (candidate_email,),
+                ).fetchone()
+                if existing_email_user and existing_email_user["id"] != user_id:
+                    raise HTTPException(status_code=409, detail="An account with this email already exists.")
+                next_email = candidate_email
+
+        next_username = current["username"]
+        next_username_normalized = current["username_normalized"]
+        next_username_updated_at = current["username_updated_at"]
+
+        if username is not None:
+            clean_username, normalized_username = validate_username(username)
+            if normalized_username != current["username_normalized"]:
+                last_updated_at = current.get("username_updated_at")
+                if last_updated_at:
+                    try:
+                        previous_update = datetime.fromisoformat(last_updated_at.replace("Z", "+00:00"))
+                    except ValueError:
+                        previous_update = datetime.now(timezone.utc) - timedelta(days=USERNAME_CHANGE_COOLDOWN_DAYS + 1)
+                    cooldown_end = previous_update + timedelta(days=USERNAME_CHANGE_COOLDOWN_DAYS)
+                    if datetime.now(timezone.utc) < cooldown_end:
+                        remaining_days = max(1, int((cooldown_end - datetime.now(timezone.utc)).days + 1))
+                        raise HTTPException(
+                            status_code=429,
+                            detail=f"Username can only be changed every {USERNAME_CHANGE_COOLDOWN_DAYS} days. Try again in {remaining_days} day(s).",
+                        )
+                if _username_exists(conn, normalized_username, exclude_user_id=user_id):
+                    raise HTTPException(status_code=409, detail="Username is already taken.")
+                next_username = clean_username
+                next_username_normalized = normalized_username
+                next_username_updated_at = _now_iso()
+
+        conn.execute(
+            """
+            UPDATE users
+            SET email = ?, username = ?, username_normalized = ?, username_updated_at = ?
+            WHERE id = ?
+            """,
+            (next_email, next_username, next_username_normalized, next_username_updated_at, user_id),
+        )
+
+    return {
+        "id": user_id,
+        "name": current["name"],
+        "email": next_email,
+        "username": next_username,
+        "username_updated_at": next_username_updated_at,
+    }
 
 
 # =========================================================

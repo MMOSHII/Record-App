@@ -162,6 +162,59 @@
           <p class="text-xs text-slate-500">{{ store.state.user.email }}</p>
         </div>
       </div>
+      <form
+        v-if="store.state.authMethod === 'basic'"
+        @submit.prevent="handleUpdateProfile"
+        class="space-y-3"
+      >
+        <div class="space-y-1">
+          <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">Email</label>
+          <input
+            v-model="profileEmail"
+            type="email"
+            required
+            autocomplete="email"
+            class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+        </div>
+        <div class="space-y-1">
+          <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">Username</label>
+          <input
+            v-model="profileUsername"
+            type="text"
+            required
+            autocomplete="username"
+            class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+          <p class="text-xs text-slate-400">Username can only be changed once every 30 days.</p>
+        </div>
+        <button
+          type="submit"
+          :disabled="updatingProfile"
+          class="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl transition text-sm disabled:opacity-50 flex items-center gap-2"
+        >
+          <svg v-if="updatingProfile" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+          </svg>
+          {{ updatingProfile ? 'Updating…' : 'Update Account' }}
+        </button>
+        <div
+          v-if="profileStatus"
+          class="rounded-xl p-3 text-sm font-semibold flex items-center gap-2"
+          :class="profileStatus.ok
+            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+            : 'bg-red-50 text-red-700 border border-red-200'"
+        >
+          <svg v-if="profileStatus.ok" class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <svg v-else class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          {{ profileStatus.message }}
+        </div>
+      </form>
       <button
         @click="handleLogout"
         :aria-label="t('nav.signOut')"
@@ -341,10 +394,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '../stores/appStore'
-import { changePassword } from '../services/authService'
+import { changePassword, updateBasicProfile } from '../services/authService'
 import { createRequestCanceller, requestJson } from '../services/httpClient'
 import { useI18n } from '../i18n/index.js'
 
@@ -373,6 +426,10 @@ const newPassword = ref('')
 const confirmNewPassword = ref('')
 const changingPassword = ref(false)
 const changePasswordStatus = ref(null)
+const profileEmail = ref(store.state.user?.email || '')
+const profileUsername = ref(store.state.user?.username || '')
+const updatingProfile = ref(false)
+const profileStatus = ref(null)
 
 const changePasswordMismatch = computed(
   () => confirmNewPassword.value.length > 0 && newPassword.value !== confirmNewPassword.value
@@ -392,6 +449,24 @@ const handleChangePassword = async () => {
     changePasswordStatus.value = { ok: false, message: err.message || t('settings.passwordFailed') }
   } finally {
     changingPassword.value = false
+  }
+}
+
+const handleUpdateProfile = async () => {
+  updatingProfile.value = true
+  profileStatus.value = null
+  try {
+    await updateBasicProfile({
+      email: profileEmail.value,
+      username: profileUsername.value
+    })
+    profileEmail.value = store.state.user?.email || profileEmail.value
+    profileUsername.value = store.state.user?.username || profileUsername.value
+    profileStatus.value = { ok: true, message: 'Account details updated.' }
+  } catch (err) {
+    profileStatus.value = { ok: false, message: err.message || 'Failed to update account details.' }
+  } finally {
+    updatingProfile.value = false
   }
 }
 
@@ -536,6 +611,15 @@ const testConnection = async () => {
 onMounted(() => {
   fetchContributors()
 })
+
+watch(
+  () => store.state.user,
+  (user) => {
+    profileEmail.value = user?.email || ''
+    profileUsername.value = user?.username || ''
+  },
+  { deep: true }
+)
 
 onBeforeUnmount(() => {
   requestCanceller.clearAll()

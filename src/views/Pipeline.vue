@@ -226,6 +226,12 @@
       <!-- Upload Mode -->
       <div v-if="inputMode === 'upload'">
         <div
+          v-if="fileValidationError"
+          class="mb-3 bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-600 font-medium"
+        >
+          {{ fileValidationError }}
+        </div>
+        <div
           class="border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer"
           :class="dragOver
             ? 'border-indigo-400 bg-indigo-50'
@@ -238,7 +244,7 @@
           <input
             ref="fileInputRef"
             type="file"
-            accept="audio/*,video/mp4,video/mpeg,video/webm"
+            accept="audio/*,.mp3,.wav,.ogg,.oga,.flac,.aac,.m4a,.opus,.webm"
             class="hidden"
             :disabled="isPipelineLocked"
             @change="onFileChange"
@@ -251,7 +257,7 @@
             </div>
             <p class="text-sm font-semibold text-slate-700">Drop your audio file here</p>
             <p class="text-xs text-slate-400 mt-1">or click to browse</p>
-            <p class="text-xs text-slate-400 mt-2">Supports MP3, WAV, M4A, OGG, FLAC, MP4...</p>
+            <p class="text-xs text-slate-400 mt-2">Supports MP3, WAV, M4A, OGG, FLAC, AAC, OPUS, WEBM (audio only).</p>
           </div>
           <div v-else class="flex items-center justify-center gap-3">
             <svg class="w-6 h-6 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -631,6 +637,7 @@ const fileInputRef = ref(null)
 const selectedFile = ref(null)
 const dragOver = ref(false)
 const uploadProcessingNotice = ref('')
+const fileValidationError = ref('')
 
 // Chunked upload state
 const chunkUploadProgress = ref(0)
@@ -759,20 +766,65 @@ const statusBadgeLabel = computed(() => pipeline.status)
 
 const onFileChange = (e) => {
   if (isPipelineLocked.value) return
-  selectedFile.value = e.target.files[0] || null
+  const file = e.target.files[0] || null
+  if (!file) {
+    selectedFile.value = null
+    fileValidationError.value = ''
+    return
+  }
+  const validationError = validateSelectedFile(file)
+  if (validationError) {
+    selectedFile.value = null
+    fileValidationError.value = validationError
+    if (fileInputRef.value) fileInputRef.value.value = ''
+    return
+  }
+  selectedFile.value = file
+  fileValidationError.value = ''
 }
 
 const onDrop = (e) => {
   if (isPipelineLocked.value) return
   dragOver.value = false
   const file = e.dataTransfer.files[0]
-  if (file) selectedFile.value = file
+  if (!file) return
+  const validationError = validateSelectedFile(file)
+  if (validationError) {
+    selectedFile.value = null
+    fileValidationError.value = validationError
+    return
+  }
+  selectedFile.value = file
+  fileValidationError.value = ''
 }
 
 const clearFile = () => {
   if (isPipelineLocked.value) return
   selectedFile.value = null
+  fileValidationError.value = ''
   if (fileInputRef.value) fileInputRef.value.value = ''
+}
+
+const ALLOWED_AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'oga', 'flac', 'aac', 'm4a', 'opus', 'webm'])
+const BLOCKED_VIDEO_EXTENSIONS = new Set(['mp4', 'm4v', 'mov', 'avi', 'mkv', 'mpeg', 'mpg'])
+
+const validateSelectedFile = (file) => {
+  const lowerName = String(file?.name || '').toLowerCase()
+  const extension = lowerName.includes('.') ? lowerName.split('.').pop() : ''
+  const mimeType = String(file?.type || '').toLowerCase()
+
+  if (mimeType.startsWith('video/') || BLOCKED_VIDEO_EXTENSIONS.has(extension)) {
+    return 'Video files are not allowed. Please upload an audio file.'
+  }
+
+  if (
+    !mimeType.startsWith('audio/') &&
+    (!extension || !ALLOWED_AUDIO_EXTENSIONS.has(extension))
+  ) {
+    return 'Unsupported file format. Please upload a valid audio file.'
+  }
+
+  return ''
 }
 
 const formatSize = (bytes) => {

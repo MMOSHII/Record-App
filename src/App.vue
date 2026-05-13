@@ -125,13 +125,28 @@ const router = useRouter()
 const route = useRoute()
 const mobileMenuOpen = ref(false)
 const transitionName = ref('slide-left')
+const isBackNavigation = ref(false)
 const { t } = useI18n()
 const { observeReveals, disconnectReveals } = useScrollReveal()
+
+const isHistoryDetailPath = (path) => /^\/history\/[^/]+$/.test(path || '')
+const handlePopstate = () => {
+  isBackNavigation.value = true
+}
 
 router.beforeEach((to, from) => {
   const toDepth = to.meta.depth ?? 1
   const fromDepth = from.meta.depth ?? 1
   transitionName.value = toDepth >= fromDepth ? 'slide-left' : 'slide-right'
+
+  if (isBackNavigation.value) {
+    isBackNavigation.value = false
+    if (isHistoryDetailPath(from.path)) {
+      if (to.path !== '/history') return '/history'
+    } else if (to.path !== '/') {
+      return '/'
+    }
+  }
   return true
 })
 
@@ -139,6 +154,7 @@ router.beforeEach((to, from) => {
 // 7 days) and a refresh token is available.  Errors are swallowed so that
 // offline users are never forcibly logged out by a failed refresh attempt.
 onMounted(async () => {
+  window.addEventListener('popstate', handlePopstate)
   if (
     store.state.authMethod === 'basic' &&
     store.state.refreshToken &&
@@ -163,6 +179,7 @@ watch(() => route.fullPath, () => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('popstate', handlePopstate)
   disconnectReveals()
 })
 

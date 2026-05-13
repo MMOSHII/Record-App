@@ -31,7 +31,7 @@ import urllib.request
 import urllib.error
 import hashlib
 
-from fastapi import BackgroundTasks, FastAPI, UploadFile, File, Form, HTTPException, Header, Request
+from fastapi import BackgroundTasks, FastAPI, UploadFile, File, Form, HTTPException, Header, Request, Body
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -92,6 +92,27 @@ _ESTIMATE_RATES: Dict[str, float] = _SETTINGS.estimates.model_dump()
 
 _CLOUD_PROVIDERS = {"openai", "anthropic", "groq", "google", "gemini"}
 logger = logging.getLogger(__name__)
+_ALLOWED_AUDIO_EXTENSIONS = {
+    "mp3",
+    "wav",
+    "ogg",
+    "oga",
+    "flac",
+    "aac",
+    "m4a",
+    "opus",
+    "webm",
+}
+_DISALLOWED_VIDEO_EXTENSIONS = {
+    "mp4",
+    "m4v",
+    "mov",
+    "avi",
+    "mkv",
+    "mpeg",
+    "mpg",
+    "webmvideo",
+}
 
 # Files produced per job folder:
 #   <base>.wav
@@ -308,6 +329,21 @@ def _safe_file_suffix(raw_filename: Optional[str]) -> str:
     suffix = os.path.splitext(raw_filename or "")[1]
     safe = "".join(c for c in suffix.lstrip(".") if c.isalnum())[:8]
     return f".{safe}" if safe else ".audio"
+
+
+def _normalized_file_extension(raw_filename: Optional[str]) -> str:
+    return _safe_file_suffix(raw_filename).lstrip(".").lower()
+
+
+def _validate_audio_upload(filename: Optional[str], content_type: Optional[str] = None) -> None:
+    extension = _normalized_file_extension(filename)
+    normalized_content_type = (content_type or "").strip().lower()
+    if extension in _DISALLOWED_VIDEO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Video uploads are not allowed. Please upload an audio file.")
+    if normalized_content_type.startswith("video/"):
+        raise HTTPException(status_code=400, detail="Video uploads are not allowed. Please upload an audio file.")
+    if extension not in _ALLOWED_AUDIO_EXTENSIONS and not normalized_content_type.startswith("audio/"):
+        raise HTTPException(status_code=400, detail="Unsupported audio format.")
 
 
 def _now_iso() -> str:
@@ -671,12 +707,21 @@ async def estimate_processing(
 # =========================================================
 
 @app.post("/api/v1/auth/register", status_code=201)
-async def register(req: RegisterRequest):
+async def register(req: Dict[str, Any] = Body(...)):
     """
     Create a new account.  Returns a JWT access token and a long-lived refresh
     token so the user is immediately logged in after registration.
     """
-    user = auth.create_user(req.name, str(req.email), req.password)
+    name = str(req.get("name") or "").strip()
+    email = str(req.get("email") or "").strip()
+    password = str(req.get("password") or "")
+    username_raw = req.get("username")
+    username = str(username_raw).strip() if username_raw is not None else None
+
+    if not name or not email or not password:
+        raise HTTPException(status_code=400, detail="name, email, and password are required.")
+
+    user = auth.create_user(name, email, password, username=username)
     token = auth.create_access_token(user["id"])
     refresh_token = auth.create_refresh_token(user["id"])
     return JSONResponse(
@@ -688,6 +733,7 @@ async def register(req: RegisterRequest):
             "user": {
                 "name": user["name"],
                 "email": user["email"],
+                "username": user.get("username", ""),
                 "picture": "",
             },
         },
@@ -699,15 +745,15 @@ async def register(req: RegisterRequest):
 # =========================================================
 
 @app.post("/api/v1/auth/login")
-async def login(req: LoginRequest):
+async def login(req: Dict[str, Any] = Body(...)):
     """
-    Authenticate with email + password.  Returns a JWT access token and a
+    Authenticate with email/username + password.  Returns a JWT access token and a
     long-lived refresh token.
-    Uses a generic error message to avoid leaking whether the email exists.
+    Uses a generic error message to avoid leaking whether the account exists.
     """
-    user = auth.get_user_by_email(str(req.email))
-    if not user or not auth.verify_password(req.password, user["hashed_password"]):
-        raise HTTPException(status_code=401, detail="Incorrect email or password.")
+    identifier = str(req.get("identifier") or req.get("email") or req.get("username") or "").strip()
+    password = str(req.get("password") or "")
+    user = auth.authenticate_basic_user(identifier, password)
 
     token = auth.create_access_token(user["id"])
     refresh_token = auth.create_refresh_token(user["id"])
@@ -720,6 +766,7 @@ async def login(req: LoginRequest):
             "user": {
                 "name": user["name"],
                 "email": user["email"],
+                "username": user.get("username", ""),
                 "picture": "",
             },
         },
@@ -818,6 +865,49 @@ async def change_password(
     return JSONResponse(status_code=200, content={"message": "Password changed successfully."})
 
 
+@app.patch("/api/v1/auth/profile", status_code=200)
+async def update_profile(
+    req: Dict[str, Any] = Body(...),
+    authorization: Optional[str] = Header(None),
+):
+    """
+    Update profile fields (email and username) for an authenticated basic-auth user.
+    Username changes are limited to once every 30 days.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    bearer_token = authorization[7:].strip()
+    user_id = auth.verify_basic_token(bearer_token)
+    user = auth.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    email = req.get("email")
+    username = req.get("username")
+    if email is None and username is None:
+        raise HTTPException(status_code=400, detail="At least one field (email or username) must be provided.")
+
+    updated = auth.update_basic_profile(
+        user_id,
+        email=str(email) if email is not None else None,
+        username=str(username) if username is not None else None,
+    )
+    return JSONResponse(
+        status_code=200,
+        content={
+            "message": "Profile updated successfully.",
+            "user": {
+                "name": updated["name"],
+                "email": updated["email"],
+                "username": updated.get("username", ""),
+                "picture": "",
+            },
+            "username_updated_at": updated.get("username_updated_at"),
+        },
+    )
+
+
 # =========================================================
 # API: TRANSCRIBE
 # =========================================================
@@ -865,6 +955,7 @@ async def transcribe_audio(
     once transcription is complete (see webhook payload documentation).
     """
     try:
+        _validate_audio_upload(file.filename, file.content_type)
         user_id = _resolve_user(google_token)
 
         safe_stem = _PIPELINE_SERVICE.build_safe_stem(file.filename)
@@ -1091,6 +1182,7 @@ async def upload_init(req: ChunkedUploadInitRequest):
     """
     try:
         user_id = _resolve_user(req.google_token)
+        _validate_audio_upload(req.filename)
 
         if req.total_chunks < 1 or req.total_chunks > _MAX_UPLOAD_CHUNKS:
             raise HTTPException(
