@@ -355,10 +355,48 @@ const loadHistory = async () => {
   }
 }
 
+const normalizeFlashcardsPayload = (payload) => {
+  const cards = Array.isArray(payload)
+    ? payload
+    : (Array.isArray(payload?.flashcards) ? payload.flashcards : [])
+  return cards.filter(card =>
+    card &&
+    typeof card === 'object' &&
+    typeof card.front === 'string' &&
+    typeof card.back === 'string'
+  )
+}
+
+const normalizeChatHistoryPayload = (payload) => {
+  const messages = Array.isArray(payload)
+    ? payload
+    : (
+      Array.isArray(payload?.history)
+        ? payload.history
+        : (
+          Array.isArray(payload?.messages)
+            ? payload.messages
+            : (Array.isArray(payload?.chatbot_history) ? payload.chatbot_history : [])
+        )
+    )
+  return messages.filter(msg =>
+    msg &&
+    typeof msg === 'object' &&
+    (msg.role === 'user' || msg.role === 'assistant') &&
+    typeof msg.content === 'string'
+  )
+}
+
 const hasCachedDetailContent = (payload) => Boolean(
   payload &&
   typeof payload === 'object' &&
-  (payload.summary || payload.transcript || (Array.isArray(payload.transcriptData) && payload.transcriptData.length))
+  (
+    payload.summary ||
+    payload.transcript ||
+    (Array.isArray(payload.transcriptData) && payload.transcriptData.length) ||
+    (Array.isArray(payload.flashcards) && payload.flashcards.length) ||
+    (Array.isArray(payload.chatMessages) && payload.chatMessages.length)
+  )
 )
 
 const saveHistoryDetailCache = (folderName, payload) => {
@@ -386,10 +424,12 @@ const syncSingleHistoryDetail = async (job) => {
   const jobDetail = await getJob(folderName, { cacheTtlMs: 0 })
   const files = jobDetail?.files || {}
 
-  const [summaryResult, transcriptJsonResult, transcriptTextResult] = await Promise.allSettled([
+  const [summaryResult, transcriptJsonResult, transcriptTextResult, flashcardsResult, chatbotHistoryResult] = await Promise.allSettled([
     files.summary_txt ? fetchDownloadText(folderName, 'summary_txt', { errorLabel: 'Failed to sync summary' }) : Promise.resolve(''),
     files.transcript_json ? fetchDownloadJson(folderName, 'transcript_json', { errorLabel: 'Failed to sync transcript JSON' }) : Promise.resolve([]),
-    files.transcript_txt ? fetchDownloadText(folderName, 'transcript_txt', { errorLabel: 'Failed to sync transcript text' }) : Promise.resolve('')
+    files.transcript_txt ? fetchDownloadText(folderName, 'transcript_txt', { errorLabel: 'Failed to sync transcript text' }) : Promise.resolve(''),
+    files.flashcards_json ? fetchDownloadJson(folderName, 'flashcards_json', { errorLabel: 'Failed to sync flashcards history' }) : Promise.resolve([]),
+    files.chatbot_json ? fetchDownloadJson(folderName, 'chatbot_json', { errorLabel: 'Failed to sync chatbot history' }) : Promise.resolve([])
   ])
 
   const payload = {
@@ -398,6 +438,12 @@ const syncSingleHistoryDetail = async (job) => {
     transcriptData: transcriptJsonResult.status === 'fulfilled' && Array.isArray(transcriptJsonResult.value)
       ? transcriptJsonResult.value
       : (Array.isArray(existing?.transcriptData) ? existing.transcriptData : []),
+    flashcards: flashcardsResult.status === 'fulfilled'
+      ? normalizeFlashcardsPayload(flashcardsResult.value)
+      : normalizeFlashcardsPayload(existing?.flashcards),
+    chatMessages: chatbotHistoryResult.status === 'fulfilled'
+      ? normalizeChatHistoryPayload(chatbotHistoryResult.value)
+      : normalizeChatHistoryPayload(existing?.chatMessages),
     manifestUpdatedAt,
     updatedAt: new Date().toISOString()
   }
