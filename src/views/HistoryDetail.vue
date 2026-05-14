@@ -660,6 +660,7 @@ import { useRoute } from 'vue-router'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 import { getJob, getDownloadUrl, fetchDownloadText, fetchDownloadJson, summarizeJob, visualizeJob, translateJob, saveTranscript, generateFlashcards, sendChatMessage, GET_CACHE_TTL_MS } from '../services/api'
+import { normalizeFlashcardsPayload, normalizeChatHistoryPayload } from '../services/historyArtifacts'
 import { createRequestCanceller } from '../services/httpClient'
 import { useAppStore } from '../stores/appStore'
 import { useI18n } from '../i18n/index.js'
@@ -835,38 +836,6 @@ const cardFlipped = ref(false)
 const flashcardCount = ref(10)
 
 const currentCard = computed(() => flashcards.value[currentCardIndex.value] || null)
-
-const normalizeFlashcardsPayload = (payload) => {
-  const cards = Array.isArray(payload)
-    ? payload
-    : (Array.isArray(payload?.flashcards) ? payload.flashcards : [])
-  return cards.filter(card =>
-    card &&
-    typeof card === 'object' &&
-    typeof card.front === 'string' &&
-    typeof card.back === 'string'
-  )
-}
-
-const normalizeChatHistoryPayload = (payload) => {
-  const messages = Array.isArray(payload)
-    ? payload
-    : (
-      Array.isArray(payload?.history)
-        ? payload.history
-        : (
-          Array.isArray(payload?.messages)
-            ? payload.messages
-            : (Array.isArray(payload?.chatbot_history) ? payload.chatbot_history : [])
-        )
-    )
-  return messages.filter(msg =>
-    msg &&
-    typeof msg === 'object' &&
-    (msg.role === 'user' || msg.role === 'assistant') &&
-    typeof msg.content === 'string'
-  )
-}
 
 const runGenerateFlashcards = async () => {
   if (!fileName.value) {
