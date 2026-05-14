@@ -6,7 +6,9 @@ export const normalizeFlashcardsPayload = (payload) => {
     card &&
     typeof card === 'object' &&
     typeof card.front === 'string' &&
-    typeof card.back === 'string'
+    card.front.trim().length > 0 &&
+    typeof card.back === 'string' &&
+    card.back.trim().length > 0
   )
 }
 
@@ -26,6 +28,7 @@ export const normalizeChatHistoryPayload = (payload) => {
     msg &&
     typeof msg === 'object' &&
     (msg.role === 'user' || msg.role === 'assistant') &&
-    typeof msg.content === 'string'
+    typeof msg.content === 'string' &&
+    msg.content.trim().length > 0
   )
 }
