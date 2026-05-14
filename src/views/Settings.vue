@@ -42,6 +42,7 @@
           class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
         >
           <option value="ollama">Ollama (Local)</option>
+          <option value="llamacpp">Llama CPP (Local)</option>
           <option value="openai">OpenAI (ChatGPT)</option>
           <option value="claude">Anthropic Claude</option>
           <option value="gemini">Google Gemini</option>
