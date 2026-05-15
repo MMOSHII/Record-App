@@ -178,10 +178,21 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { getHistory, summarizeJob, visualizeJob, deleteJobs, GET_CACHE_TTL_MS } from '../services/api.js'
+import {
+  getHistory,
+  getJob,
+  fetchDownloadText,
+  fetchDownloadJson,
+  summarizeJob,
+  visualizeJob,
+  deleteJobs,
+  GET_CACHE_TTL_MS
+} from '../services/api.js'
+import { normalizeFlashcardsPayload, normalizeChatHistoryPayload } from '../services/historyArtifacts'
 import { useAppStore } from '../stores/appStore'
+import { isCapacitorNative } from '../services/authService'
 import { useI18n } from '../i18n/index.js'
 
 const router = useRouter()
@@ -191,6 +202,8 @@ const { t } = useI18n()
 const jobs = ref(Array.isArray(store.state.historyCache) ? [...store.state.historyCache] : [])
 const loading = ref(false)
 const error = ref('')
+const nativeApp = isCapacitorNative()
+const syncingOfflineCache = ref(false)
 const reRunning = reactive({})
 const searchQuery = ref('')
 
@@ -329,6 +342,7 @@ const loadHistory = async () => {
     const normalized = Array.isArray(result) ? result : (result.jobs || result.data || [])
     jobs.value = normalized
     store.state.historyCache = normalized
+    await syncHistoryDetailsForOffline(normalized)
   } catch (err) {
     const cached = Array.isArray(store.state.historyCache) ? store.state.historyCache : []
     if (cached.length) {
@@ -340,6 +354,91 @@ const loadHistory = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const hasCachedDetailContent = (payload) => Boolean(
+  payload &&
+  typeof payload === 'object' &&
+  (
+    payload.summary ||
+    payload.transcript ||
+    (Array.isArray(payload.transcriptData) && payload.transcriptData.length) ||
+    (Array.isArray(payload.flashcards) && payload.flashcards.length) ||
+    (Array.isArray(payload.chatMessages) && payload.chatMessages.length)
+  )
+)
+
+const saveHistoryDetailCache = (folderName, payload) => {
+  if (!folderName || !hasCachedDetailContent(payload)) return
+  store.state.historyDetailCache = {
+    ...(store.state.historyDetailCache || {}),
+    [folderName]: payload
+  }
+}
+
+const syncSingleHistoryDetail = async (job) => {
+  const folderName = job?.folder_name
+  if (!folderName) return
+
+  const manifestUpdatedAt = String(job?.updated_at || job?.created_at || '')
+  const existing = store.state.historyDetailCache?.[folderName]
+  if (
+    hasCachedDetailContent(existing) &&
+    existing.manifestUpdatedAt &&
+    existing.manifestUpdatedAt === manifestUpdatedAt
+  ) {
+    return
+  }
+
+  const jobDetail = await getJob(folderName, { cacheTtlMs: 0 })
+  const files = jobDetail?.files || {}
+
+  const [summaryResult, transcriptJsonResult, transcriptTextResult, flashcardsResult, chatbotHistoryResult] = await Promise.allSettled([
+    files.summary_txt ? fetchDownloadText(folderName, 'summary_txt', { errorLabel: 'Failed to sync summary' }) : Promise.resolve(''),
+    files.transcript_json ? fetchDownloadJson(folderName, 'transcript_json', { errorLabel: 'Failed to sync transcript JSON' }) : Promise.resolve([]),
+    files.transcript_txt ? fetchDownloadText(folderName, 'transcript_txt', { errorLabel: 'Failed to sync transcript text' }) : Promise.resolve(''),
+    files.flashcards_json ? fetchDownloadJson(folderName, 'flashcards_json', { errorLabel: 'Failed to sync flashcards history' }) : Promise.resolve([]),
+    files.chatbot_json ? fetchDownloadJson(folderName, 'chatbot_json', { errorLabel: 'Failed to sync chatbot history' }) : Promise.resolve([])
+  ])
+
+  const payload = {
+    summary: summaryResult.status === 'fulfilled' && typeof summaryResult.value === 'string' ? summaryResult.value : (existing?.summary || ''),
+    transcript: transcriptTextResult.status === 'fulfilled' && typeof transcriptTextResult.value === 'string' ? transcriptTextResult.value : (existing?.transcript || ''),
+    transcriptData: transcriptJsonResult.status === 'fulfilled' && Array.isArray(transcriptJsonResult.value)
+      ? transcriptJsonResult.value
+      : (Array.isArray(existing?.transcriptData) ? existing.transcriptData : []),
+    flashcards: flashcardsResult.status === 'fulfilled'
+      ? normalizeFlashcardsPayload(flashcardsResult.value)
+      : normalizeFlashcardsPayload(existing?.flashcards),
+    chatMessages: chatbotHistoryResult.status === 'fulfilled'
+      ? normalizeChatHistoryPayload(chatbotHistoryResult.value)
+      : normalizeChatHistoryPayload(existing?.chatMessages),
+    manifestUpdatedAt,
+    updatedAt: new Date().toISOString()
+  }
+
+  saveHistoryDetailCache(folderName, payload)
+}
+
+const syncHistoryDetailsForOffline = async (historyJobs = []) => {
+  if (!nativeApp || !navigator.onLine) return
+  if (!Array.isArray(historyJobs) || !historyJobs.length) return
+  syncingOfflineCache.value = true
+  try {
+    const batchSize = 4
+    for (let i = 0; i < historyJobs.length; i += batchSize) {
+      const batch = historyJobs.slice(i, i + batchSize)
+      await Promise.allSettled(batch.map(job => syncSingleHistoryDetail(job)))
+    }
+  } catch {
+    // Keep history page usable if background sync fails.
+  } finally {
+    syncingOfflineCache.value = false
+  }
+}
+
+const handleOnlineSync = () => {
+  syncHistoryDetailsForOffline(jobs.value)
 }
 
 const openJobDetail = (folderName) => {
@@ -369,5 +468,10 @@ const reRunJob = async (job) => {
 
 onMounted(() => {
   loadHistory()
+  window.addEventListener('online', handleOnlineSync)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('online', handleOnlineSync)
 })
 </script>

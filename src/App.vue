@@ -33,44 +33,6 @@
             <span>{{ store.state.user.name }}</span>
           </div>
         </div>
-
-        <!-- Mobile user menu trigger -->
-        <button
-          class="motion-interactive md:hidden px-3 py-2 rounded-lg hover:bg-slate-100 transition text-sm font-semibold text-slate-700 flex items-center gap-1.5 max-w-[70vw]"
-          @click="mobileMenuOpen = !mobileMenuOpen"
-          :aria-label="`${t('settings.account')} ${t('nav.toggleMenu').toLowerCase()}`"
-        >
-          <span class="truncate">{{ store.state.user?.name || t('settings.account') }}</span>
-          <svg
-            class="w-4 h-4 shrink-0 transition-transform"
-            :class="{ 'rotate-180': mobileMenuOpen }"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-          </svg>
-        </button>
-      </div>
-
-      <!-- Mobile dropdown menu -->
-      <div v-if="mobileMenuOpen" class="md:hidden border-t border-slate-100 bg-white px-4 py-3 space-y-2">
-        <router-link
-          v-for="link in navLinks"
-          :key="link.to"
-          :to="link.to"
-          class="motion-interactive flex items-center gap-2 py-2 px-3 rounded-lg text-sm font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 transition"
-          active-class="bg-indigo-50 text-indigo-700"
-          @click="mobileMenuOpen = false"
-        >
-          <NavIcon :name="link.icon" />
-          <span>{{ link.label }}</span>
-        </router-link>
-        <div class="pt-2 border-t border-slate-100">
-          <div v-if="store.state.user" class="text-xs text-slate-500 px-3 py-1">
-            {{ t('nav.signedInAs') }} <span class="font-semibold">{{ store.state.user.name }}</span>
-          </div>
-        </div>
       </div>
     </nav>
 
@@ -123,15 +85,29 @@ import { useScrollReveal } from './composables/useScrollReveal'
 const store = useAppStore()
 const router = useRouter()
 const route = useRoute()
-const mobileMenuOpen = ref(false)
 const transitionName = ref('slide-left')
+const isBackNavigation = ref(false)
 const { t } = useI18n()
 const { observeReveals, disconnectReveals } = useScrollReveal()
+
+const isHistoryDetailPath = (path) => /^\/history\/[^/]+$/.test(path || '')
+const handlePopstate = () => {
+  isBackNavigation.value = true
+}
 
 router.beforeEach((to, from) => {
   const toDepth = to.meta.depth ?? 1
   const fromDepth = from.meta.depth ?? 1
   transitionName.value = toDepth >= fromDepth ? 'slide-left' : 'slide-right'
+
+  if (isBackNavigation.value) {
+    isBackNavigation.value = false
+    if (isHistoryDetailPath(from.path)) {
+      if (to.path !== '/history') return '/history'
+    } else if (to.path !== '/') {
+      return '/'
+    }
+  }
   return true
 })
 
@@ -139,6 +115,7 @@ router.beforeEach((to, from) => {
 // 7 days) and a refresh token is available.  Errors are swallowed so that
 // offline users are never forcibly logged out by a failed refresh attempt.
 onMounted(async () => {
+  window.addEventListener('popstate', handlePopstate)
   if (
     store.state.authMethod === 'basic' &&
     store.state.refreshToken &&
@@ -163,6 +140,7 @@ watch(() => route.fullPath, () => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('popstate', handlePopstate)
   disconnectReveals()
 })
 

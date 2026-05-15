@@ -51,16 +51,17 @@ export async function signInWithGoogleNative() {
 // ---------------------------------------------------------------------------
 
 /**
- * Log in with email and password.
+ * Log in with email/username and password.
  * Expects the backend to return `{ token, user? }` or `{ access_token, user? }`.
  */
-export async function loginBasic(email, password) {
+export async function loginBasic(identifier, password) {
   const store = useAppStore()
   const url = `${store.getBaseUrl()}/api/v1/auth/login`
+  const cleanIdentifier = (identifier || '').trim()
   const data = await requestJson(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ identifier: cleanIdentifier, password }),
     timeoutMs: 15000
   })
 
@@ -68,8 +69,9 @@ export async function loginBasic(email, password) {
   store.state.refreshToken = data.refresh_token || ''
   store.state.tokenExpiresAt = data.expires_in ? Date.now() + data.expires_in * 1000 : 0
   store.state.user = {
-    name: data.user?.name || data.name || email,
-    email: data.user?.email || data.email || email,
+    name: data.user?.name || data.name || cleanIdentifier,
+    email: data.user?.email || data.email || '',
+    username: data.user?.username || data.username || '',
     picture: data.user?.picture || data.picture || ''
   }
   store.state.authMethod = 'basic'
@@ -120,6 +122,7 @@ export async function registerBasic(name, email, password) {
     store.state.user = {
       name: data.user?.name || name,
       email: data.user?.email || email,
+      username: data.user?.username || data.username || '',
       picture: data.user?.picture || ''
     }
     store.state.authMethod = 'basic'
@@ -172,6 +175,34 @@ export async function changePassword(currentPassword, newPassword) {
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
     timeoutMs: 15000
   })
+}
+
+/**
+ * Update profile fields for the currently authenticated basic-auth user.
+ * Supports email and username updates.
+ */
+export async function updateBasicProfile({ email, username }) {
+  const store = useAppStore()
+  const url = `${store.getBaseUrl()}/api/v1/auth/profile`
+  const data = await requestJson(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${store.state.token}`
+    },
+    body: JSON.stringify({ email, username }),
+    timeoutMs: 15000
+  })
+
+  store.state.user = {
+    ...(store.state.user || {}),
+    name: data.user?.name || store.state.user?.name || '',
+    email: data.user?.email || email || store.state.user?.email || '',
+    username: data.user?.username || username || store.state.user?.username || '',
+    picture: data.user?.picture || store.state.user?.picture || ''
+  }
+  return data
 }
 
 /**

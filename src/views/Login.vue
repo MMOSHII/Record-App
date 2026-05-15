@@ -34,13 +34,13 @@
       <div v-show="tab === 'basic'">
         <form @submit.prevent="handleBasicLogin" class="space-y-4">
           <div class="space-y-1">
-            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">{{ t('login.email') }}</label>
+            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wide">Email or Username</label>
             <input
-              v-model="email"
-              type="email"
+              v-model="identifier"
+              type="text"
               required
-              autocomplete="email"
-              :placeholder="t('login.emailPlaceholder')"
+              autocomplete="username"
+              placeholder="Enter your email or username"
               class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
@@ -211,7 +211,7 @@ const { t } = useI18n()
 const errorMsg = ref('')
 const loading = ref(false)
 const tab = ref('basic')
-const email = ref('')
+const identifier = ref('')
 const password = ref('')
 const showPassword = ref(false)
 const apiToken = ref('')
@@ -269,7 +269,7 @@ const handleBasicLogin = async () => {
   loading.value = true
   errorMsg.value = ''
   try {
-    await loginBasic(email.value, password.value)
+    await loginBasic(identifier.value, password.value)
     router.push('/')
   } catch (e) {
     errorMsg.value = e.message || 'Login failed. Please check your credentials.'
