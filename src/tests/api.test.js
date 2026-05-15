@@ -526,3 +526,51 @@ describe('sendChatMessage', () => {
     await expect(api.sendChatMessage('job_1', 'audio', 'q')).rejects.toThrow('Chat failed (500)')
   })
 })
+
+describe('share APIs', () => {
+  it('creates share link with folder_name', async () => {
+    const result = { share_id: 'abc', public_url: 'http://x/#/share/abc?token=t&sig=s' }
+    global.fetch = vi.fn().mockResolvedValue(makeResponse(result))
+    const data = await api.createShareLink('job_1')
+    const [url, opts] = global.fetch.mock.calls[0]
+    expect(url).toBe('https://api.example.com/api/v1/share/create')
+    expect(opts.method).toBe('POST')
+    const body = JSON.parse(opts.body)
+    expect(body.folder_name).toBe('job_1')
+    expect(body.google_token).toBe('test-token')
+    expect(data).toEqual(result)
+  })
+
+  it('fetches public share without auth header', async () => {
+    const result = { share_id: 'abc', summary: 'hi' }
+    global.fetch = vi.fn().mockResolvedValue(makeResponse(result))
+    const data = await api.getPublicShare('abc', 'token-value', 'sig-value')
+    const [url, opts] = global.fetch.mock.calls[0]
+    expect(url).toContain('/api/v1/share/abc?token=token-value&sig=sig-value')
+    expect(opts.method).toBe('GET')
+    expect(opts.headers.Authorization).toBeUndefined()
+    expect(data).toEqual(result)
+  })
+})
+
+describe('fetchHistoryArtifactsParallel', () => {
+  it('downloads artifacts in parallel and reports progress', async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(makeResponse('summary text'))
+      .mockResolvedValueOnce(makeResponse([{ speaker: 0, text: 'hello' }]))
+    const progress = []
+    const result = await api.fetchHistoryArtifactsParallel(
+      'job_1',
+      [
+        { name: 'summary_txt', type: 'text' },
+        { name: 'transcript_json', type: 'json' }
+      ],
+      { onProgress: (p) => progress.push(p.percent) }
+    )
+
+    expect(result.summary_txt.status).toBe('fulfilled')
+    expect(result.transcript_json.status).toBe('fulfilled')
+    expect(progress.at(-1)).toBe(100)
+  })
+})

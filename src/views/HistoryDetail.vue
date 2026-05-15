@@ -400,31 +400,33 @@
         <div v-if="activeTab === 'ai'" class="divide-y divide-slate-100">
           <!-- Chatbot -->
           <div class="flex flex-col" style="max-height: 520px;">
-            <div class="px-5 py-3 flex items-center gap-3 bg-teal-50/50 border-b border-slate-100">
+            <div class="px-5 py-3 flex items-center justify-between gap-3 bg-teal-50/50 border-b border-slate-100">
               <div class="w-7 h-7 rounded-lg bg-teal-100 flex items-center justify-center flex-shrink-0">
                 <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
                 </svg>
               </div>
               <h2 class="text-sm font-bold text-slate-800">Ask the Transcript</h2>
+              <button
+                @click="startNewChatSession"
+                class="ml-auto text-[11px] font-semibold text-teal-700 hover:text-teal-800 bg-teal-100 hover:bg-teal-200 px-2.5 py-1 rounded-lg transition"
+              >
+                New Session
+              </button>
             </div>
-            <div ref="chatScrollRef" class="flex-1 overflow-y-auto p-5 space-y-3 min-h-[120px]">
-              <div v-if="!chatMessages.length" class="text-center py-8">
-                <svg class="w-8 h-8 text-slate-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
-                <p class="text-xs text-slate-400">Ask anything about this recording.</p>
-                <p class="text-xs text-slate-400 mt-1">e.g. "What topics were discussed?" or "Summarize from 00:02:00 to 00:05:00."</p>
+            <div class="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[220px,1fr]">
+              <div class="border-r border-slate-100 p-3">
+                <ChatHistoryPanel
+                  :sessions="chatSessions"
+                  :active-session-id="activeChatSessionId"
+                  :loading="chatSessionsLoading"
+                  @select="selectChatSession"
+                  @delete="deleteChatSession"
+                />
               </div>
-              <div v-for="(msg, i) in chatMessages" :key="i" class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
-                <div class="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm"
-                     :class="msg.role === 'user' ? 'bg-indigo-600 text-white rounded-br-sm' : 'bg-slate-100 text-slate-800 rounded-bl-sm'">
-                  <p class="whitespace-pre-wrap break-words">{{ msg.content }}</p>
-                </div>
-              </div>
-              <div v-if="chatLoading" class="flex justify-start">
-                <div class="bg-slate-100 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1.5">
-                  <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay:0ms"></span>
-                  <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay:150ms"></span>
-                  <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay:300ms"></span>
+              <div class="min-h-0">
+                <div ref="chatScrollRef">
+                  <ChatMessageList :messages="chatMessages" :loading="chatLoading" />
                 </div>
               </div>
             </div>
@@ -434,24 +436,8 @@
                 <p class="text-xs text-red-700 font-semibold">{{ chatError }}</p>
               </div>
             </div>
-            <div class="border-t border-slate-200 p-4 flex items-end gap-3">
-              <textarea
-                v-model="chatInput"
-                @keydown="handleChatKeydown"
-                placeholder="Ask a question about the transcript… (Enter to send)"
-                rows="2"
-                :disabled="chatLoading"
-                class="flex-1 resize-none border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition disabled:opacity-50 leading-relaxed"
-              ></textarea>
-              <button
-                @click="sendChat"
-                :disabled="chatLoading || !chatInput.trim()"
-                class="flex-shrink-0 flex items-center justify-center w-10 h-10 bg-teal-600 hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition shadow-sm"
-                aria-label="Send message"
-              >
-                <svg v-if="chatLoading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-              </button>
+            <div class="border-t border-slate-200 p-4">
+              <ChatInput :disabled="chatLoading" @submit="sendChat" />
             </div>
           </div>
 
@@ -539,6 +525,31 @@
 
         <!-- ── Tab Panel: Actions ── -->
         <div v-if="activeTab === 'actions'" class="p-6 space-y-6">
+          <div class="space-y-3 pb-4 border-b border-slate-100">
+            <div class="flex items-center justify-between gap-3">
+              <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Public Share</h3>
+              <div class="flex items-center gap-2">
+                <button
+                  @click="copyShareLink"
+                  :disabled="shareState.creating"
+                  class="inline-flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold px-3 py-1.5 rounded-lg transition"
+                >
+                  {{ shareState.creating ? 'Creating…' : 'Share' }}
+                </button>
+                <button
+                  v-if="shareId"
+                  @click="revokeShare"
+                  :disabled="shareState.revoking"
+                  class="inline-flex items-center gap-1.5 text-xs bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold px-3 py-1.5 rounded-lg transition"
+                >
+                  {{ shareState.revoking ? 'Revoking…' : 'Revoke' }}
+                </button>
+              </div>
+            </div>
+            <p v-if="shareProgress > 0 && shareProgress < 100" class="text-xs text-slate-500">Loading artifacts: {{ shareProgress }}%</p>
+            <p v-if="shareLink" class="text-xs text-slate-700 break-all">{{ shareLink }}</p>
+            <p v-if="shareError" class="text-xs text-red-600 font-semibold">{{ shareError }}</p>
+          </div>
 
           <!-- Audio player -->
           <div>
@@ -659,14 +670,19 @@ import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
-import { getJob, getDownloadUrl, fetchDownloadText, fetchDownloadJson, summarizeJob, visualizeJob, translateJob, saveTranscript, generateFlashcards, sendChatMessage, GET_CACHE_TTL_MS } from '../services/api'
+import { getJob, getDownloadUrl, fetchDownloadText, fetchDownloadJson, summarizeJob, visualizeJob, translateJob, saveTranscript, generateFlashcards, createShareLink, revokeShareLink, fetchHistoryArtifactsParallel, GET_CACHE_TTL_MS } from '../services/api'
 import { normalizeFlashcardsPayload, normalizeChatHistoryPayload } from '../services/historyArtifacts'
 import { createRequestCanceller } from '../services/httpClient'
 import { useAppStore } from '../stores/appStore'
+import { useChatbotStore } from '../stores/chatbotStore'
 import { useI18n } from '../i18n/index.js'
+import ChatHistoryPanel from '../components/ChatHistoryPanel.jsx'
+import ChatInput from '../components/ChatInput.jsx'
+import ChatMessageList from '../components/ChatMessageList.jsx'
 
 const route = useRoute()
 const store = useAppStore()
+const chatbotStore = useChatbotStore()
 const { t } = useI18n()
 
 const TRANSLATE_LANGUAGES = [
@@ -790,6 +806,11 @@ const hasTranscriptContent = computed(() => transcriptData.value.length > 0 || B
 const actionLoading = reactive({ summarize: false, visualize: false })
 const actionError = ref('')
 const actionSuccess = ref('')
+const shareState = reactive({ creating: false, revoking: false })
+const shareLink = ref('')
+const shareId = ref('')
+const shareError = ref('')
+const shareProgress = ref(0)
 const transcriptSaveLoading = ref(false)
 const transcriptSaveError = ref('')
 const transcriptDirty = ref(false)
@@ -874,46 +895,46 @@ const prevCard = () => {
 }
 
 // --- Chatbot state ---
-const chatMessages = ref([])   // [{ role: 'user'|'assistant', content: string }]
-const chatInput = ref('')
-const chatLoading = ref(false)
-const chatError = ref('')
 const chatScrollRef = ref(null)
+const chatBucket = computed(() => chatbotStore.ensureHistoryState(folderName.value))
+const chatMessages = computed(() => Array.isArray(chatBucket.value.messages) ? chatBucket.value.messages : [])
+const chatSessions = computed(() => Array.isArray(chatBucket.value.sessions) ? chatBucket.value.sessions : [])
+const activeChatSessionId = computed(() => String(chatBucket.value.activeSessionId || ''))
+const chatLoading = computed(() => Boolean(chatBucket.value.loadingMessages || chatBucket.value.sending))
+const chatSessionsLoading = computed(() => Boolean(chatBucket.value.loadingSessions))
+const chatError = computed(() => String(chatBucket.value.error || ''))
 
-const sendChat = async () => {
-  const question = chatInput.value.trim()
-  if (!question || chatLoading.value) return
+const sendChat = async (question) => {
+  const clean = String(question || '').trim()
+  if (!clean || chatLoading.value) return
   if (!fileName.value) {
-    chatError.value = 'Job file name is not available. Please reload the page.'
     return
   }
-  chatMessages.value.push({ role: 'user', content: question })
-  chatInput.value = ''
-  chatLoading.value = true
-  chatError.value = ''
-  await nextTick()
-  if (chatScrollRef.value) chatScrollRef.value.scrollTop = chatScrollRef.value.scrollHeight
 
   try {
-    const history = chatMessages.value.slice(0, -1).map(m => ({ role: m.role, content: m.content }))
-    const result = await sendChatMessage(folderName.value, fileName.value, question, history)
-    chatMessages.value.push({ role: 'assistant', content: result.answer })
-  } catch (err) {
-    chatError.value = err.message
-    chatMessages.value.pop()
-  } finally {
+    await chatbotStore.sendMessage(folderName.value, clean, { sessionId: activeChatSessionId.value || undefined })
     saveCachedDetail()
-    chatLoading.value = false
-    await nextTick()
-    if (chatScrollRef.value) chatScrollRef.value.scrollTop = chatScrollRef.value.scrollHeight
+  } catch {
+    // Error state is set by store.
   }
+  await nextTick()
+  if (chatScrollRef.value) chatScrollRef.value.scrollTop = chatScrollRef.value.scrollHeight
 }
 
-const handleChatKeydown = (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    sendChat()
-  }
+const selectChatSession = async (sessionId) => {
+  await chatbotStore.setActiveSession(folderName.value, sessionId)
+  await nextTick()
+  if (chatScrollRef.value) chatScrollRef.value.scrollTop = chatScrollRef.value.scrollHeight
+}
+
+const deleteChatSession = async (sessionId) => {
+  await chatbotStore.removeSession(folderName.value, sessionId)
+}
+
+const startNewChatSession = async () => {
+  await chatbotStore.createSession(folderName.value, 'Conversation')
+  await nextTick()
+  if (chatScrollRef.value) chatScrollRef.value.scrollTop = chatScrollRef.value.scrollHeight
 }
 
 // --- Language switcher (view translated content) ---
@@ -1171,9 +1192,14 @@ const resetDetailState = () => {
   cardFlipped.value = false
   flashcardsError.value = ''
   // Reset chatbot state
-  chatMessages.value = []
-  chatInput.value = ''
-  chatError.value = ''
+  const chatState = chatbotStore.ensureHistoryState(folderName.value)
+  chatState.sessions = []
+  chatState.activeSessionId = ''
+  chatState.messages = []
+  chatState.loadingSessions = false
+  chatState.loadingMessages = false
+  chatState.sending = false
+  chatState.error = ''
   // Reset tab state
   activeTab.value = 'summary'
   activeTranscriptTab.value = 'editor'
@@ -1255,63 +1281,58 @@ const loadDetail = async () => {
   if (cached) applyCachedDetail(cached)
   
   try {
+    try {
+      await chatbotStore.loadSessions(folderName.value, { autoSelect: true })
+    } catch {
+      // Chat sessions are best-effort; continue loading page artifacts.
+    }
     const jobDetail = await getJob(folderName.value, { signal, cacheTtlMs: GET_CACHE_TTL_MS.JOB })
     manifest.value = jobDetail
     const files = jobDetail?.files || {}
 
-    const [summaryResult, transcriptJsonResult, transcriptTextResult, flashcardsResult, chatbotHistoryResult] = await Promise.allSettled([
-      files.summary_txt
-        ? fetchDownloadText(folderName.value, 'summary_txt', {
-            signal,
-            errorLabel: 'Failed to load summary'
-          })
-        : Promise.resolve(null),
-      files.transcript_json
-        ? fetchDownloadJson(folderName.value, 'transcript_json', {
-            signal,
-            errorLabel: 'Failed to load interactive transcript'
-          })
-        : Promise.resolve(null),
-      files.transcript_txt
-        ? fetchDownloadText(folderName.value, 'transcript_txt', {
-            signal,
-            errorLabel: 'Failed to load transcript'
-          })
-        : Promise.resolve(null),
-      files.flashcards_json
-        ? fetchDownloadJson(folderName.value, 'flashcards_json', {
-            signal,
-            errorLabel: 'Failed to load flashcards history'
-          })
-        : Promise.resolve(null),
-      files.chatbot_json
-        ? fetchDownloadJson(folderName.value, 'chatbot_json', {
-            signal,
-            errorLabel: 'Failed to load chatbot history'
-          })
-        : Promise.resolve(null)
-    ])
+    shareProgress.value = 0
+    const artifacts = await fetchHistoryArtifactsParallel(
+      folderName.value,
+      [
+        files.summary_txt ? { name: 'summary_txt', type: 'text' } : null,
+        files.transcript_json ? { name: 'transcript_json', type: 'json' } : null,
+        files.transcript_txt ? { name: 'transcript_txt', type: 'text' } : null,
+        files.flashcards_json ? { name: 'flashcards_json', type: 'json' } : null,
+        files.chatbot_json ? { name: 'chatbot_json', type: 'json' } : null
+      ].filter(Boolean),
+      {
+        signal,
+        onProgress: ({ percent }) => {
+          shareProgress.value = percent
+        }
+      }
+    )
+    const summaryResult = artifacts.summary_txt || { status: 'fulfilled', data: null }
+    const transcriptJsonResult = artifacts.transcript_json || { status: 'fulfilled', data: null }
+    const transcriptTextResult = artifacts.transcript_txt || { status: 'fulfilled', data: null }
+    const flashcardsResult = artifacts.flashcards_json || { status: 'fulfilled', data: null }
+    const chatbotHistoryResult = artifacts.chatbot_json || { status: 'fulfilled', data: null }
 
-    if (summaryResult.status === 'fulfilled' && typeof summaryResult.value === 'string') {
-      detail.value.summary = summaryResult.value
+    if (summaryResult.status === 'fulfilled' && typeof summaryResult.data === 'string') {
+      detail.value.summary = summaryResult.data
     } else if (!cached?.summary) {
       detail.value.summary = ''
     }
 
-    if (transcriptJsonResult.status === 'fulfilled' && Array.isArray(transcriptJsonResult.value)) {
-      transcriptData.value = transcriptJsonResult.value.map((item, index) => ({ ...item, _id: index }))
+    if (transcriptJsonResult.status === 'fulfilled' && Array.isArray(transcriptJsonResult.data)) {
+      transcriptData.value = transcriptJsonResult.data.map((item, index) => ({ ...item, _id: index }))
     } else if (!Array.isArray(cached?.transcriptData) || !cached.transcriptData.length) {
       transcriptData.value = []
     }
 
-    if (transcriptTextResult.status === 'fulfilled' && typeof transcriptTextResult.value === 'string') {
-      detail.value.transcript = transcriptTextResult.value
+    if (transcriptTextResult.status === 'fulfilled' && typeof transcriptTextResult.data === 'string') {
+      detail.value.transcript = transcriptTextResult.data
     } else if (!cached?.transcript) {
       detail.value.transcript = ''
     }
 
     if (flashcardsResult.status === 'fulfilled') {
-      flashcards.value = normalizeFlashcardsPayload(flashcardsResult.value)
+      flashcards.value = normalizeFlashcardsPayload(flashcardsResult.data)
       currentCardIndex.value = 0
       cardFlipped.value = false
     } else if (!Array.isArray(cached?.flashcards) || !cached.flashcards.length) {
@@ -1321,7 +1342,7 @@ const loadDetail = async () => {
     }
 
     if (chatbotHistoryResult.status === 'fulfilled') {
-      chatMessages.value = normalizeChatHistoryPayload(chatbotHistoryResult.value)
+      chatMessages.value = normalizeChatHistoryPayload(chatbotHistoryResult.data)
     } else if (!Array.isArray(cached?.chatMessages) || !cached.chatMessages.length) {
       chatMessages.value = []
     }
@@ -1345,6 +1366,43 @@ const loadDetail = async () => {
     if (!signal.aborted) {
       loading.value = false
     }
+  }
+}
+
+const copyShareLink = async () => {
+  shareError.value = ''
+  actionSuccess.value = ''
+  shareState.creating = true
+  try {
+    const result = await createShareLink(folderName.value)
+    shareLink.value = result.public_url || ''
+    shareId.value = result.share_id || ''
+    if (shareLink.value && navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(shareLink.value)
+      actionSuccess.value = 'Share link copied to clipboard.'
+    } else {
+      actionSuccess.value = 'Share link generated.'
+    }
+  } catch (err) {
+    shareError.value = err.message || 'Failed to create share link.'
+  } finally {
+    shareState.creating = false
+  }
+}
+
+const revokeShare = async () => {
+  if (!shareId.value) return
+  shareError.value = ''
+  shareState.revoking = true
+  try {
+    await revokeShareLink(shareId.value)
+    shareLink.value = ''
+    shareId.value = ''
+    actionSuccess.value = 'Share link revoked.'
+  } catch (err) {
+    shareError.value = err.message || 'Failed to revoke share link.'
+  } finally {
+    shareState.revoking = false
   }
 }
 
