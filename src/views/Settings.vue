@@ -235,87 +235,6 @@
       </a>
     </div>
 
-    <!-- Creators -->
-    <div data-reveal data-reveal-delay="200" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
-      <h2 class="text-base font-bold text-slate-900">{{ t('settings.creatorsTitle') }}</h2>
-      <p class="text-sm text-slate-500">{{ t('settings.creatorsSubtitle') }}</p>
-
-      <div v-if="contributorsLoading" class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 flex items-center gap-2">
-        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
-        <span>{{ t('settings.creatorsLoading') }}</span>
-      </div>
-
-      <div
-        v-else-if="contributorsError"
-        class="rounded-xl p-3 text-sm font-semibold flex items-center justify-between gap-3 bg-red-50 text-red-700 border border-red-200"
-      >
-        <span>{{ contributorsError }}</span>
-        <button
-          type="button"
-          @click="fetchContributors({ force: true })"
-          class="motion-interactive shrink-0 bg-white hover:bg-red-100 border border-red-200 text-red-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
-        >
-          {{ t('settings.retry') }}
-        </button>
-      </div>
-
-      <p v-else-if="contributors.length === 0" class="text-sm text-slate-500">
-        {{ t('settings.creatorsEmpty') }}
-      </p>
-
-      <ul v-else class="space-y-2">
-        <li
-          v-for="contributor in contributors"
-          :key="contributor.id"
-          class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2.5"
-        >
-          <div class="flex items-center gap-3 min-w-0">
-            <img
-              v-if="contributor.avatarUrl"
-              :src="contributor.avatarUrl"
-              :alt="contributor.name"
-              class="w-8 h-8 rounded-full"
-            />
-            <div
-              v-else
-              class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0"
-            >
-              {{ contributor.fallbackInitial }}
-            </div>
-            <span class="text-sm font-medium text-slate-800 truncate">{{ contributor.name }}</span>
-          </div>
-          <a
-            v-if="contributor.profileUrl"
-            :href="contributor.profileUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition shrink-0"
-          >
-            {{ t('settings.viewProfile') }}
-          </a>
-        </li>
-      </ul>
-    </div>
-
-    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-3">
-      <h2 class="text-base font-bold text-slate-900">Terms &amp; Conditions</h2>
-      <p class="text-sm text-slate-500">
-        Review the Terms &amp; Conditions that apply when using your account and this service.
-      </p>
-      <router-link
-        to="/terms-and-conditions"
-        class="motion-interactive inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
-      >
-        Open Terms &amp; Conditions
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-        </svg>
-      </router-link>
-    </div>
-
     <!-- Change Password (basic-auth users only) -->
     <div
       v-if="store.state.authMethod === 'basic'"
@@ -400,6 +319,87 @@
         </svg>
         {{ changePasswordStatus.message }}
       </div>
+    </div>
+
+    <!-- Creators -->
+    <div data-reveal data-reveal-delay="200" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+      <h2 class="text-base font-bold text-slate-900">{{ t('settings.creatorsTitle') }}</h2>
+      <p class="text-sm text-slate-500">{{ t('settings.creatorsSubtitle') }}</p>
+
+      <div v-if="contributorsLoading" class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 flex items-center gap-2">
+        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        <span>{{ t('settings.creatorsLoading') }}</span>
+      </div>
+
+      <div
+        v-else-if="contributorsError"
+        class="rounded-xl p-3 text-sm font-semibold flex items-center justify-between gap-3 bg-red-50 text-red-700 border border-red-200"
+      >
+        <span>{{ contributorsError }}</span>
+        <button
+          type="button"
+          @click="fetchContributors({ force: true })"
+          class="motion-interactive shrink-0 bg-white hover:bg-red-100 border border-red-200 text-red-700 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
+        >
+          {{ t('settings.retry') }}
+        </button>
+      </div>
+
+      <p v-else-if="contributors.length === 0" class="text-sm text-slate-500">
+        {{ t('settings.creatorsEmpty') }}
+      </p>
+
+      <ul v-else class="space-y-2">
+        <li
+          v-for="contributor in contributors"
+          :key="contributor.id"
+          class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2.5"
+        >
+          <div class="flex items-center gap-3 min-w-0">
+            <img
+              v-if="contributor.avatarUrl"
+              :src="contributor.avatarUrl"
+              :alt="contributor.name"
+              class="w-8 h-8 rounded-full"
+            />
+            <div
+              v-else
+              class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0"
+            >
+              {{ contributor.fallbackInitial }}
+            </div>
+            <span class="text-sm font-medium text-slate-800 truncate">{{ contributor.name }}</span>
+          </div>
+          <a
+            v-if="contributor.profileUrl"
+            :href="contributor.profileUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-xs font-semibold text-indigo-600 hover:text-indigo-700 transition shrink-0"
+          >
+            {{ t('settings.viewProfile') }}
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-3">
+      <h2 class="text-base font-bold text-slate-900">Terms &amp; Conditions</h2>
+      <p class="text-sm text-slate-500">
+        Review the Terms &amp; Conditions that apply when using your account and this service.
+      </p>
+      <router-link
+        to="/terms-and-conditions"
+        class="motion-interactive inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+      >
+        Open Terms &amp; Conditions
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>
+      </router-link>
     </div>
 
     <!-- Auto-save note -->
