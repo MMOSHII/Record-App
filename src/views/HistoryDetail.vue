@@ -1,8 +1,9 @@
 <template>
-  <div class="min-h-screen pb-10 space-y-4">
+  <div class="min-h-screen pb-8 sm:pb-10 px-3 sm:px-4 lg:px-6">
+    <div class="mx-auto w-full max-w-7xl space-y-4">
 
     <!-- ──────────────── Header Card ──────────────── -->
-    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
       <!-- Back nav -->
       <router-link
         to="/history"
@@ -49,7 +50,7 @@
             </div>
           </div>
           <!-- Re-run quick buttons -->
-          <div v-if="canSummarize || canVisualize" class="flex flex-wrap gap-2">
+          <div class="flex flex-wrap gap-2">
             <button
               v-if="canSummarize"
               @click="runSummarizeDetail"
@@ -69,6 +70,15 @@
               <svg v-if="actionLoading.visualize" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
               <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
               {{ actionLoading.visualize ? 'Visualizing…' : 'Visualize' }}
+            </button>
+            <button
+              @click="copyShareLink"
+              :disabled="shareState.creating"
+              class="inline-flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold px-3 py-1.5 rounded-lg transition shadow-sm"
+            >
+              <svg v-if="shareState.creating" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16h8m-8-4h8m-8-4h8m4 8v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h8"/></svg>
+              {{ shareButtonLabel }}
             </button>
           </div>
         </div>
@@ -109,6 +119,31 @@
       <div v-if="actionSuccess" class="mt-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2">
         <svg class="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
         <p class="text-xs text-emerald-700 font-semibold">{{ actionSuccess }}</p>
+      </div>
+      <div v-if="shareLink || shareError || (shareProgress > 0 && shareProgress < 100)" class="mt-3 bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Public share</span>
+          <a
+            v-if="shareLink"
+            :href="shareLink"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700"
+          >
+            Open Link
+          </a>
+          <button
+            v-if="shareId"
+            @click="revokeShare"
+            :disabled="shareState.revoking"
+            class="ml-auto inline-flex items-center gap-1.5 text-[11px] bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed font-semibold px-2.5 py-1 rounded-lg transition"
+          >
+            {{ shareState.revoking ? 'Revoking…' : 'Revoke' }}
+          </button>
+        </div>
+        <p v-if="shareProgress > 0 && shareProgress < 100" class="text-xs text-slate-500">Loading artifacts: {{ shareProgress }}%</p>
+        <p v-if="shareLink" class="text-xs text-slate-700 break-all">{{ shareLink }}</p>
+        <p v-if="shareError" class="text-xs text-red-600 font-semibold">{{ shareError }}</p>
       </div>
     </div>
 
@@ -152,13 +187,13 @@
       <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
 
         <!-- Tab Navigation Bar -->
-        <nav class="flex overflow-x-auto border-b border-slate-200 px-1 pt-1 gap-1 scrollbar-hide">
+        <nav class="flex flex-wrap items-center border-b border-slate-200 bg-slate-50/80 p-2 gap-1.5">
           <button
             @click="activeTab = 'summary'"
             :class="activeTab === 'summary'
-              ? 'text-amber-700 bg-amber-50 border-amber-400'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border-transparent'"
-            class="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 whitespace-nowrap transition-colors"
+              ? 'text-amber-700 bg-amber-50 border-amber-300'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-white border-transparent'"
+            class="flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg border whitespace-nowrap transition-colors"
           >
             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
@@ -170,9 +205,9 @@
             v-if="hasTranscriptContent"
             @click="activeTab = 'transcript'"
             :class="activeTab === 'transcript'
-              ? 'text-emerald-700 bg-emerald-50 border-emerald-400'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border-transparent'"
-            class="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 whitespace-nowrap transition-colors"
+              ? 'text-emerald-700 bg-emerald-50 border-emerald-300'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-white border-transparent'"
+            class="flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg border whitespace-nowrap transition-colors"
           >
             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
@@ -185,9 +220,9 @@
             v-if="manifest?.files?.transcript_json"
             @click="activeTab = 'ai'"
             :class="activeTab === 'ai'
-              ? 'text-teal-700 bg-teal-50 border-teal-400'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border-transparent'"
-            class="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 whitespace-nowrap transition-colors"
+              ? 'text-teal-700 bg-teal-50 border-teal-300'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-white border-transparent'"
+            class="flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg border whitespace-nowrap transition-colors"
           >
             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
@@ -198,9 +233,9 @@
           <button
             @click="activeTab = 'actions'"
             :class="activeTab === 'actions'
-              ? 'text-indigo-700 bg-indigo-50 border-indigo-400'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border-transparent'"
-            class="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 whitespace-nowrap transition-colors"
+              ? 'text-indigo-700 bg-indigo-50 border-indigo-300'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-white border-transparent'"
+            class="flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg border whitespace-nowrap transition-colors"
           >
             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
@@ -354,7 +389,7 @@
                 <p v-else-if="transcriptSaveLoading" class="text-xs text-slate-500 font-semibold mb-2">Saving transcript changes…</p>
                 <p v-else-if="!transcriptDirty && transcriptData.length" class="text-xs text-emerald-600 font-semibold mb-2">Transcript changes saved.</p>
               </div>
-              <div class="flex flex-col space-y-4 max-h-[600px] overflow-y-auto pr-2 pb-4">
+              <div class="flex flex-col space-y-4 max-h-[55vh] lg:max-h-[640px] overflow-y-auto pr-2 pb-4">
                 <div v-if="filteredTranscript.length === 0" class="text-sm text-slate-400 italic text-center py-4">Data kosong.</div>
                 <div v-for="item in filteredTranscript" :key="item._id"
                      class="group relative p-4 rounded-xl max-w-[85%] md:max-w-[80%] border-l-[6px] shadow-sm transition-all duration-200"
@@ -399,7 +434,7 @@
         <!-- ── Tab Panel: AI Tools ── -->
         <div v-if="activeTab === 'ai'" class="divide-y divide-slate-100">
           <!-- Chatbot -->
-          <div class="flex flex-col" style="max-height: 520px;">
+          <div class="flex flex-col min-h-[500px] max-h-[72vh]">
             <div class="px-5 py-3 flex items-center justify-between gap-3 bg-teal-50/50 border-b border-slate-100">
               <div class="w-7 h-7 rounded-lg bg-teal-100 flex items-center justify-center flex-shrink-0">
                 <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -414,8 +449,8 @@
                 New Session
               </button>
             </div>
-            <div class="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[220px,1fr]">
-              <div class="border-r border-slate-100 p-3">
+            <div class="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[240px,1fr]">
+              <div class="border-b md:border-b-0 md:border-r border-slate-100 p-3">
                 <ChatHistoryPanel
                   :sessions="chatSessions"
                   :active-session-id="activeChatSessionId"
@@ -524,32 +559,7 @@
         </div>
 
         <!-- ── Tab Panel: Actions ── -->
-        <div v-if="activeTab === 'actions'" class="p-6 space-y-6">
-          <div class="space-y-3 pb-4 border-b border-slate-100">
-            <div class="flex items-center justify-between gap-3">
-              <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Public Share</h3>
-              <div class="flex items-center gap-2">
-                <button
-                  @click="copyShareLink"
-                  :disabled="shareState.creating"
-                  class="inline-flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold px-3 py-1.5 rounded-lg transition"
-                >
-                  {{ shareState.creating ? 'Creating…' : 'Share' }}
-                </button>
-                <button
-                  v-if="shareId"
-                  @click="revokeShare"
-                  :disabled="shareState.revoking"
-                  class="inline-flex items-center gap-1.5 text-xs bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold px-3 py-1.5 rounded-lg transition"
-                >
-                  {{ shareState.revoking ? 'Revoking…' : 'Revoke' }}
-                </button>
-              </div>
-            </div>
-            <p v-if="shareProgress > 0 && shareProgress < 100" class="text-xs text-slate-500">Loading artifacts: {{ shareProgress }}%</p>
-            <p v-if="shareLink" class="text-xs text-slate-700 break-all">{{ shareLink }}</p>
-            <p v-if="shareError" class="text-xs text-red-600 font-semibold">{{ shareError }}</p>
-          </div>
+        <div v-if="activeTab === 'actions'" class="p-6 space-y-8">
 
           <!-- Audio player -->
           <div>
@@ -663,6 +673,7 @@
 
       </div>
     </template>
+    </div>
   </div>
 </template>
 <script setup>
@@ -990,6 +1001,10 @@ const canSummarize = computed(() =>
 const canVisualize = computed(() =>
   manifest.value && String(manifest.value.status?.visualize || '').toLowerCase() !== 'done'
 )
+const shareButtonLabel = computed(() => {
+  if (shareState.creating) return shareLink.value ? 'Copying…' : 'Creating…'
+  return shareLink.value ? 'Copy Link' : 'Share'
+})
 
 // --- Diarization Interactive Data ---
 const transcriptData = ref([])
@@ -1372,12 +1387,24 @@ const loadDetail = async () => {
 const copyShareLink = async () => {
   shareError.value = ''
   actionSuccess.value = ''
+  if (shareLink.value) {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(shareLink.value)
+      actionSuccess.value = 'Share link copied to clipboard.'
+    } else {
+      actionSuccess.value = 'Share link is ready.'
+    }
+    return
+  }
   shareState.creating = true
   try {
     const result = await createShareLink(folderName.value)
     shareLink.value = result.public_url || ''
     shareId.value = result.share_id || ''
-    if (shareLink.value && navigator?.clipboard?.writeText) {
+    if (!shareLink.value) {
+      throw new Error('Share link could not be generated.')
+    }
+    if (navigator?.clipboard?.writeText) {
       await navigator.clipboard.writeText(shareLink.value)
       actionSuccess.value = 'Share link copied to clipboard.'
     } else {
