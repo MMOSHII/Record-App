@@ -3,6 +3,12 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --app-bg: #f8fafc;
+    --app-surface: #ffffff;
+    --app-text: #0f172a;
+  }
+
   :focus-visible {
     @apply outline-none ring-2 ring-indigo-600 ring-offset-2;
   }
@@ -71,6 +77,16 @@
 
   .slide-right-leave-to {
     @apply opacity-0 translate-x-6;
+  }
+
+  .pipeline-modal-fade-enter-active,
+  .pipeline-modal-fade-leave-active {
+    transition: opacity 180ms ease;
+  }
+
+  .pipeline-modal-fade-enter-from,
+  .pipeline-modal-fade-leave-to {
+    opacity: 0;
   }
 }
 

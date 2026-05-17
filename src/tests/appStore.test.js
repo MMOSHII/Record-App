@@ -154,6 +154,20 @@ describe('appStore – clearPipeline()', () => {
   })
 })
 
+describe('appStore – pipeline modal state', () => {
+  it('opens, minimizes, and closes modal state', async () => {
+    const { state, openPipelineModal, togglePipelineMinimized, closePipelineModal } = await freshStore()
+    openPipelineModal()
+    expect(state.pipelineUi.isOpen).toBe(true)
+    expect(state.pipelineUi.isMinimized).toBe(false)
+    togglePipelineMinimized()
+    expect(state.pipelineUi.isMinimized).toBe(true)
+    closePipelineModal()
+    expect(state.pipelineUi.isOpen).toBe(false)
+    expect(state.pipelineUi.isMinimized).toBe(false)
+  })
+})
+
 describe('appStore – getBaseUrl()', () => {
   it('returns trimmed URL without trailing slash', async () => {
     const { state, getBaseUrl } = await freshStore()

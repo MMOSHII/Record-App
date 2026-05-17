@@ -40,7 +40,7 @@ const routes = [
   },
   {
     path: '/pipeline',
-    component: () => import('../views/Pipeline.vue'),
+    component: () => import('../views/PipelineLauncher.vue'),
     meta: { requiresAuth: true, title: 'Pipeline', depth: 2 }
   },
   {

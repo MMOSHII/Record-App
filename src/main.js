@@ -2,6 +2,9 @@ import { createApp } from 'vue'
 import './assets/main.css'
 import App from './App.vue'
 import router from './router/index.js'
+import { initThemeProvider } from './theme/themeProvider.jsx'
+
+initThemeProvider()
 
 const app = createApp(App)
 

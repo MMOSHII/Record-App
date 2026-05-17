@@ -29,6 +29,18 @@
       </div>
     </div>
 
+    <ApiSettingsPanel
+      :loading="configStore.state.loading || configStore.state.saving"
+      :resetting="configStore.state.resetting"
+      :error="configStore.state.error"
+      @load="loadRuntimeConfig"
+      @reset="resetRuntimeConfig"
+    />
+    <AiProviderSettings :config="configStore.state.config || {}" @save="saveRuntimePatch" />
+    <UploadSettings :config="configStore.state.config || {}" @save="saveRuntimePatch" />
+    <PerformanceSettings :config="configStore.state.config || {}" @save="saveRuntimePatch" />
+    <ThemeSettings />
+
     <!-- LLM Provider Settings -->
     <div data-reveal data-reveal-delay="80" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
       <h2 class="text-base font-bold text-slate-900">{{ t('settings.llmProvider') }}</h2>
@@ -417,8 +429,15 @@ import { useAppStore } from '../stores/appStore'
 import { changePassword, updateBasicProfile } from '../services/authService'
 import { createRequestCanceller, requestJson } from '../services/httpClient'
 import { useI18n } from '../i18n/index.js'
+import { useConfigStore } from '../stores/configStore'
+import ApiSettingsPanel from '../components/settings/ApiSettingsPanel.vue'
+import AiProviderSettings from '../components/settings/AiProviderSettings.vue'
+import UploadSettings from '../components/settings/UploadSettings.vue'
+import PerformanceSettings from '../components/settings/PerformanceSettings.vue'
+import ThemeSettings from '../components/settings/ThemeSettings.vue'
 
 const store = useAppStore()
+const configStore = useConfigStore()
 const router = useRouter()
 const settings = store.state.settings
 const { t, locale, setLocale, availableLocales } = useI18n()
@@ -625,8 +644,21 @@ const testConnection = async () => {
   }
 }
 
+const loadRuntimeConfig = async () => {
+  await configStore.loadConfig()
+}
+
+const saveRuntimePatch = async (patch) => {
+  await configStore.patchConfig(patch)
+}
+
+const resetRuntimeConfig = async () => {
+  await configStore.resetConfig()
+}
+
 onMounted(() => {
   fetchContributors()
+  loadRuntimeConfig()
 })
 
 watch(
