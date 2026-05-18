@@ -66,12 +66,12 @@
           v-model="settings.provider"
           class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
         >
-          <option value="ollama">Ollama (Local)</option>
-          <option value="llamacpp">Llama CPP (Local)</option>
-          <option value="openai">OpenAI (ChatGPT)</option>
-          <option value="claude">Anthropic Claude</option>
-          <option value="gemini">Google Gemini</option>
-          <option value="groq">Groq</option>
+          <option value="ollama">{{ t('settings.providerOptions.ollama') }}</option>
+          <option value="llamacpp">{{ t('settings.providerOptions.llamacpp') }}</option>
+          <option value="openai">{{ t('settings.providerOptions.openai') }}</option>
+          <option value="claude">{{ t('settings.providerOptions.claude') }}</option>
+          <option value="gemini">{{ t('settings.providerOptions.gemini') }}</option>
+          <option value="groq">{{ t('settings.providerOptions.groq') }}</option>
         </select>
       </div>
 
@@ -97,7 +97,7 @@
           <input
             :type="showApiKey ? 'text' : 'password'"
             v-model="settings.apiKey"
-            placeholder="sk-..."
+            :placeholder="t('settings.apiKeyPlaceholder')"
             class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 pr-10"
           />
           <button
@@ -127,7 +127,7 @@
         <input
           type="url"
           v-model="settings.apiUrl"
-          placeholder="http://localhost:8000 (leave blank to use dev proxy)"
+          :placeholder="t('settings.apiBaseUrlPlaceholder')"
           class="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
         />
         <p class="text-xs text-slate-400">{{ t('settings.apiBaseUrlHint') }}</p>

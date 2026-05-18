@@ -12,9 +12,13 @@ export default {
   },
   theme: {
     system: 'System',
-    light: 'Light',
-    dark: 'Dark',
-    dim: 'Dimmed Dark',
+    softAurora: 'Soft Aurora',
+    minimalLatte: 'Minimal Latte',
+    oceanBreeze: 'Ocean Breeze',
+    sakuraLight: 'Sakura Light',
+    warmSunset: 'Warm Sunset',
+    midnightNeon: 'Midnight Neon',
+    deepForest: 'Deep Forest',
     highContrast: 'High Contrast'
   },
   home: {
@@ -177,14 +181,24 @@ export default {
     subtitle: 'Configure your LLM provider and API connection.',
     llmProvider: 'LLM Provider',
     provider: 'Provider',
+    providerOptions: {
+      ollama: 'Ollama (Local)',
+      llamacpp: 'Llama CPP (Local)',
+      openai: 'OpenAI (ChatGPT)',
+      claude: 'Anthropic Claude',
+      gemini: 'Google Gemini',
+      groq: 'Groq'
+    },
     modelName: 'Model Name',
     modelNameHint: '(optional — uses provider default)',
     apiKey: 'API Key',
+    apiKeyPlaceholder: 'sk-...',
     apiKeyHint: '(leave blank for local providers)',
     show: 'Show',
     hide: 'Hide',
     backendConnection: 'Backend Connection',
     apiBaseUrl: 'API Base URL',
+    apiBaseUrlPlaceholder: 'http://localhost:8000 (leave blank to use dev proxy)',
     apiBaseUrlHint: 'Base URL of your backend. Leave blank when using the Vite dev-server proxy.',
     testConnection: 'Test Connection',
     testing: 'Testing…',
@@ -249,6 +263,8 @@ export default {
     subtitle: 'Upload audio → Transcribe → Summarize → Visualize',
     emailPassword: 'Email & Password',
     apiToken: 'API Token',
+    backendUrl: 'Backend URL',
+    backendUrlPlaceholder: 'http://localhost:8000',
     email: 'Email',
     emailPlaceholder: 'you@example.com',
     password: 'Password',
@@ -273,6 +289,23 @@ export default {
     googleFailed: 'Google sign-in failed. Please try again.',
     basicFailed: 'Login failed. Please check your credentials.',
     apiTokenInvalid: 'Invalid API token. Please check your token and try again.'
+  },
+  shared: {
+    optional: '(optional)'
+  },
+  shareDetail: {
+    title: 'Shared Recording',
+    expiresAt: 'Expires: {date}',
+    loading: 'Loading shared detail…',
+    summary: 'Summary',
+    transcript: 'Transcript',
+    visualization: 'Visualization',
+    visualizationAlt: 'Timeline visualization',
+    flashcards: 'Flashcards',
+    question: 'Q',
+    answer: 'A',
+    invalidLink: 'Invalid share link.',
+    loadFailed: 'Failed to load shared detail.'
   },
   signup: {
     title: 'Create an account',

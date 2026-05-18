@@ -15,11 +15,11 @@
 <script setup>
 import { computed } from 'vue'
 import { useThemeStore } from '../../stores/themeStore'
-import { THEME_OPTIONS } from '../../theme/themeTokens'
+import { THEME_OPTIONS, getThemeLabelKey } from '../../theme/themeTokens'
 import { useI18n } from '../../i18n/index.js'
 
 const theme = useThemeStore()
 const options = THEME_OPTIONS
 const { t } = useI18n()
-const currentThemeLabel = computed(() => t(`theme.${theme.state.resolvedTheme === 'high-contrast' ? 'highContrast' : theme.state.resolvedTheme}`))
+const currentThemeLabel = computed(() => t(getThemeLabelKey(theme.state.resolvedTheme)))
 </script>
