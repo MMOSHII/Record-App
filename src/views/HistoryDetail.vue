@@ -1,8 +1,9 @@
 <template>
-  <div class="min-h-screen pb-10 space-y-4">
+  <div class="min-h-screen pb-8 sm:pb-10 px-3 sm:px-4 lg:px-6">
+    <div class="mx-auto w-full max-w-7xl space-y-4">
 
     <!-- ──────────────── Header Card ──────────────── -->
-    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
       <!-- Back nav -->
       <router-link
         to="/history"
@@ -49,7 +50,7 @@
             </div>
           </div>
           <!-- Re-run quick buttons -->
-          <div v-if="canSummarize || canVisualize" class="flex flex-wrap gap-2">
+          <div class="flex flex-wrap gap-2">
             <button
               v-if="canSummarize"
               @click="runSummarizeDetail"
@@ -69,6 +70,15 @@
               <svg v-if="actionLoading.visualize" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
               <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>
               {{ actionLoading.visualize ? 'Visualizing…' : 'Visualize' }}
+            </button>
+            <button
+              @click="copyShareLink"
+              :disabled="shareState.creating"
+              class="inline-flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold px-3 py-1.5 rounded-lg transition shadow-sm"
+            >
+              <svg v-if="shareState.creating" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+              <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16h8m-8-4h8m-8-4h8m4 8v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h8"/></svg>
+              {{ shareButtonLabel }}
             </button>
           </div>
         </div>
@@ -109,6 +119,31 @@
       <div v-if="actionSuccess" class="mt-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2">
         <svg class="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
         <p class="text-xs text-emerald-700 font-semibold">{{ actionSuccess }}</p>
+      </div>
+      <div v-if="shareLink || shareError || (shareProgress > 0 && shareProgress < 100)" class="mt-3 bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Public share</span>
+          <a
+            v-if="shareLink"
+            :href="shareLink"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700"
+          >
+            Open Link
+          </a>
+          <button
+            v-if="shareId"
+            @click="revokeShare"
+            :disabled="shareState.revoking"
+            class="ml-auto inline-flex items-center gap-1.5 text-[11px] bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed font-semibold px-2.5 py-1 rounded-lg transition"
+          >
+            {{ shareState.revoking ? 'Revoking…' : 'Revoke' }}
+          </button>
+        </div>
+        <p v-if="shareProgress > 0 && shareProgress < 100" class="text-xs text-slate-500">Loading artifacts: {{ shareProgress }}%</p>
+        <p v-if="shareLink" class="text-xs text-slate-700 break-all">{{ shareLink }}</p>
+        <p v-if="shareError" class="text-xs text-red-600 font-semibold">{{ shareError }}</p>
       </div>
     </div>
 
@@ -152,13 +187,13 @@
       <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
 
         <!-- Tab Navigation Bar -->
-        <nav class="flex overflow-x-auto border-b border-slate-200 px-1 pt-1 gap-1 scrollbar-hide">
+        <nav class="flex flex-wrap items-center border-b border-slate-200 bg-slate-50/80 p-2 gap-1.5">
           <button
             @click="activeTab = 'summary'"
             :class="activeTab === 'summary'
-              ? 'text-amber-700 bg-amber-50 border-amber-400'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border-transparent'"
-            class="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 whitespace-nowrap transition-colors"
+              ? 'text-amber-700 bg-amber-50 border-amber-300'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-white border-transparent'"
+            class="flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg border whitespace-nowrap transition-colors"
           >
             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
@@ -170,9 +205,9 @@
             v-if="hasTranscriptContent"
             @click="activeTab = 'transcript'"
             :class="activeTab === 'transcript'
-              ? 'text-emerald-700 bg-emerald-50 border-emerald-400'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border-transparent'"
-            class="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 whitespace-nowrap transition-colors"
+              ? 'text-emerald-700 bg-emerald-50 border-emerald-300'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-white border-transparent'"
+            class="flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg border whitespace-nowrap transition-colors"
           >
             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
@@ -185,9 +220,9 @@
             v-if="manifest?.files?.transcript_json"
             @click="activeTab = 'ai'"
             :class="activeTab === 'ai'
-              ? 'text-teal-700 bg-teal-50 border-teal-400'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border-transparent'"
-            class="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 whitespace-nowrap transition-colors"
+              ? 'text-teal-700 bg-teal-50 border-teal-300'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-white border-transparent'"
+            class="flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg border whitespace-nowrap transition-colors"
           >
             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
@@ -198,9 +233,9 @@
           <button
             @click="activeTab = 'actions'"
             :class="activeTab === 'actions'
-              ? 'text-indigo-700 bg-indigo-50 border-indigo-400'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border-transparent'"
-            class="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 whitespace-nowrap transition-colors"
+              ? 'text-indigo-700 bg-indigo-50 border-indigo-300'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-white border-transparent'"
+            class="flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg border whitespace-nowrap transition-colors"
           >
             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
@@ -354,7 +389,7 @@
                 <p v-else-if="transcriptSaveLoading" class="text-xs text-slate-500 font-semibold mb-2">Saving transcript changes…</p>
                 <p v-else-if="!transcriptDirty && transcriptData.length" class="text-xs text-emerald-600 font-semibold mb-2">Transcript changes saved.</p>
               </div>
-              <div class="flex flex-col space-y-4 max-h-[600px] overflow-y-auto pr-2 pb-4">
+              <div class="flex flex-col space-y-4 max-h-[55vh] lg:max-h-[640px] overflow-y-auto pr-2 pb-4">
                 <div v-if="filteredTranscript.length === 0" class="text-sm text-slate-400 italic text-center py-4">Data kosong.</div>
                 <div v-for="item in filteredTranscript" :key="item._id"
                      class="group relative p-4 rounded-xl max-w-[85%] md:max-w-[80%] border-l-[6px] shadow-sm transition-all duration-200"
@@ -399,59 +434,45 @@
         <!-- ── Tab Panel: AI Tools ── -->
         <div v-if="activeTab === 'ai'" class="divide-y divide-slate-100">
           <!-- Chatbot -->
-          <div class="flex flex-col" style="max-height: 520px;">
-            <div class="px-5 py-3 flex items-center gap-3 bg-teal-50/50 border-b border-slate-100">
+          <div class="flex flex-col min-h-[420px] max-h-[78vh] overflow-hidden">
+            <div class="px-5 py-3 flex items-center justify-between gap-3 bg-teal-50/50 border-b border-slate-100">
               <div class="w-7 h-7 rounded-lg bg-teal-100 flex items-center justify-center flex-shrink-0">
                 <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
                 </svg>
               </div>
               <h2 class="text-sm font-bold text-slate-800">Ask the Transcript</h2>
-            </div>
-            <div ref="chatScrollRef" class="flex-1 overflow-y-auto p-5 space-y-3 min-h-[120px]">
-              <div v-if="!chatMessages.length" class="text-center py-8">
-                <svg class="w-8 h-8 text-slate-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
-                <p class="text-xs text-slate-400">Ask anything about this recording.</p>
-                <p class="text-xs text-slate-400 mt-1">e.g. "What topics were discussed?" or "Summarize from 00:02:00 to 00:05:00."</p>
-              </div>
-              <div v-for="(msg, i) in chatMessages" :key="i" class="flex" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
-                <div class="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm"
-                     :class="msg.role === 'user' ? 'bg-indigo-600 text-white rounded-br-sm' : 'bg-slate-100 text-slate-800 rounded-bl-sm'">
-                  <p class="whitespace-pre-wrap break-words">{{ msg.content }}</p>
-                </div>
-              </div>
-              <div v-if="chatLoading" class="flex justify-start">
-                <div class="bg-slate-100 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1.5">
-                  <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay:0ms"></span>
-                  <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay:150ms"></span>
-                  <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay:300ms"></span>
-                </div>
-              </div>
-            </div>
-            <div v-if="chatError" class="mx-5 mb-2">
-              <div class="bg-red-50 border border-red-200 rounded-xl p-2.5 flex items-start gap-2">
-                <svg class="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                <p class="text-xs text-red-700 font-semibold">{{ chatError }}</p>
-              </div>
-            </div>
-            <div class="border-t border-slate-200 p-4 flex items-end gap-3">
-              <textarea
-                v-model="chatInput"
-                @keydown="handleChatKeydown"
-                placeholder="Ask a question about the transcript… (Enter to send)"
-                rows="2"
-                :disabled="chatLoading"
-                class="flex-1 resize-none border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition disabled:opacity-50 leading-relaxed"
-              ></textarea>
               <button
-                @click="sendChat"
-                :disabled="chatLoading || !chatInput.trim()"
-                class="flex-shrink-0 flex items-center justify-center w-10 h-10 bg-teal-600 hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition shadow-sm"
-                aria-label="Send message"
+                @click="startNewChatSession"
+                class="ml-auto text-[11px] font-semibold text-teal-700 hover:text-teal-800 bg-teal-100 hover:bg-teal-200 px-2.5 py-1 rounded-lg transition"
               >
-                <svg v-if="chatLoading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                New Session
               </button>
+            </div>
+            <div class="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[240px,1fr]">
+              <div class="border-b md:border-b-0 md:border-r border-slate-100 p-3 min-h-[140px] md:min-h-0">
+                <ChatHistoryPanel
+                  :sessions="chatSessions"
+                  :active-session-id="activeChatSessionId"
+                  :loading="chatSessionsLoading"
+                  @select="selectChatSession"
+                  @delete="deleteChatSession"
+                />
+              </div>
+              <div class="min-h-0 flex flex-col bg-white">
+                <div ref="chatScrollRef" class="flex-1 min-h-0 overflow-y-auto overscroll-contain scroll-smooth">
+                  <ChatMessageList :messages="chatMessages" :loading="chatLoading" />
+                </div>
+                <div v-if="chatError" class="px-4 pb-2">
+                  <div class="bg-red-50 border border-red-200 rounded-xl p-2.5 flex items-start gap-2">
+                    <svg class="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <p class="text-xs text-red-700 font-semibold">{{ chatError }}</p>
+                  </div>
+                </div>
+                <div class="border-t border-slate-200 p-3 sm:p-4 bg-white">
+                  <ChatInput :disabled="chatLoading" @submit="sendChat" />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -538,7 +559,7 @@
         </div>
 
         <!-- ── Tab Panel: Actions ── -->
-        <div v-if="activeTab === 'actions'" class="p-6 space-y-6">
+        <div v-if="activeTab === 'actions'" class="p-6 space-y-8">
 
           <!-- Audio player -->
           <div>
@@ -652,6 +673,7 @@
 
       </div>
     </template>
+    </div>
   </div>
 </template>
 <script setup>
@@ -659,14 +681,19 @@ import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
-import { getJob, getDownloadUrl, fetchDownloadText, fetchDownloadJson, summarizeJob, visualizeJob, translateJob, saveTranscript, generateFlashcards, sendChatMessage, GET_CACHE_TTL_MS } from '../services/api'
+import { getJob, getDownloadUrl, fetchDownloadText, fetchDownloadJson, summarizeJob, visualizeJob, translateJob, saveTranscript, generateFlashcards, createShareLink, revokeShareLink, fetchHistoryArtifactsParallel, GET_CACHE_TTL_MS } from '../services/api'
 import { normalizeFlashcardsPayload, normalizeChatHistoryPayload } from '../services/historyArtifacts'
 import { createRequestCanceller } from '../services/httpClient'
 import { useAppStore } from '../stores/appStore'
+import { useChatbotStore } from '../stores/chatbotStore'
 import { useI18n } from '../i18n/index.js'
+import ChatHistoryPanel from '../components/ChatHistoryPanel.jsx'
+import ChatInput from '../components/ChatInput.jsx'
+import ChatMessageList from '../components/ChatMessageList.jsx'
 
 const route = useRoute()
 const store = useAppStore()
+const chatbotStore = useChatbotStore()
 const { t } = useI18n()
 
 const TRANSLATE_LANGUAGES = [
@@ -790,6 +817,11 @@ const hasTranscriptContent = computed(() => transcriptData.value.length > 0 || B
 const actionLoading = reactive({ summarize: false, visualize: false })
 const actionError = ref('')
 const actionSuccess = ref('')
+const shareState = reactive({ creating: false, revoking: false })
+const shareLink = ref('')
+const shareId = ref('')
+const shareError = ref('')
+const shareProgress = ref(0)
 const transcriptSaveLoading = ref(false)
 const transcriptSaveError = ref('')
 const transcriptDirty = ref(false)
@@ -874,46 +906,46 @@ const prevCard = () => {
 }
 
 // --- Chatbot state ---
-const chatMessages = ref([])   // [{ role: 'user'|'assistant', content: string }]
-const chatInput = ref('')
-const chatLoading = ref(false)
-const chatError = ref('')
 const chatScrollRef = ref(null)
+const chatBucket = computed(() => chatbotStore.ensureHistoryState(folderName.value))
+const chatMessages = computed(() => Array.isArray(chatBucket.value.messages) ? chatBucket.value.messages : [])
+const chatSessions = computed(() => Array.isArray(chatBucket.value.sessions) ? chatBucket.value.sessions : [])
+const activeChatSessionId = computed(() => String(chatBucket.value.activeSessionId || ''))
+const chatLoading = computed(() => Boolean(chatBucket.value.loadingMessages || chatBucket.value.sending))
+const chatSessionsLoading = computed(() => Boolean(chatBucket.value.loadingSessions))
+const chatError = computed(() => String(chatBucket.value.error || ''))
 
-const sendChat = async () => {
-  const question = chatInput.value.trim()
-  if (!question || chatLoading.value) return
+const sendChat = async (question) => {
+  const clean = String(question || '').trim()
+  if (!clean || chatLoading.value) return
   if (!fileName.value) {
-    chatError.value = 'Job file name is not available. Please reload the page.'
     return
   }
-  chatMessages.value.push({ role: 'user', content: question })
-  chatInput.value = ''
-  chatLoading.value = true
-  chatError.value = ''
-  await nextTick()
-  if (chatScrollRef.value) chatScrollRef.value.scrollTop = chatScrollRef.value.scrollHeight
 
   try {
-    const history = chatMessages.value.slice(0, -1).map(m => ({ role: m.role, content: m.content }))
-    const result = await sendChatMessage(folderName.value, fileName.value, question, history)
-    chatMessages.value.push({ role: 'assistant', content: result.answer })
-  } catch (err) {
-    chatError.value = err.message
-    chatMessages.value.pop()
-  } finally {
+    await chatbotStore.sendMessage(folderName.value, clean, { sessionId: activeChatSessionId.value || undefined })
     saveCachedDetail()
-    chatLoading.value = false
-    await nextTick()
-    if (chatScrollRef.value) chatScrollRef.value.scrollTop = chatScrollRef.value.scrollHeight
+  } catch {
+    // Error state is set by store.
   }
+  await nextTick()
+  if (chatScrollRef.value) chatScrollRef.value.scrollTop = chatScrollRef.value.scrollHeight
 }
 
-const handleChatKeydown = (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    sendChat()
-  }
+const selectChatSession = async (sessionId) => {
+  await chatbotStore.setActiveSession(folderName.value, sessionId)
+  await nextTick()
+  if (chatScrollRef.value) chatScrollRef.value.scrollTop = chatScrollRef.value.scrollHeight
+}
+
+const deleteChatSession = async (sessionId) => {
+  await chatbotStore.removeSession(folderName.value, sessionId)
+}
+
+const startNewChatSession = async () => {
+  await chatbotStore.createSession(folderName.value, 'Conversation')
+  await nextTick()
+  if (chatScrollRef.value) chatScrollRef.value.scrollTop = chatScrollRef.value.scrollHeight
 }
 
 // --- Language switcher (view translated content) ---
@@ -969,6 +1001,10 @@ const canSummarize = computed(() =>
 const canVisualize = computed(() =>
   manifest.value && String(manifest.value.status?.visualize || '').toLowerCase() !== 'done'
 )
+const shareButtonLabel = computed(() => {
+  if (shareState.creating) return shareLink.value ? 'Copying…' : 'Creating…'
+  return shareLink.value ? 'Copy Link' : 'Share'
+})
 
 // --- Diarization Interactive Data ---
 const transcriptData = ref([])
@@ -1171,9 +1207,14 @@ const resetDetailState = () => {
   cardFlipped.value = false
   flashcardsError.value = ''
   // Reset chatbot state
-  chatMessages.value = []
-  chatInput.value = ''
-  chatError.value = ''
+  const chatState = chatbotStore.ensureHistoryState(folderName.value)
+  chatState.sessions = []
+  chatState.activeSessionId = ''
+  chatState.messages = []
+  chatState.loadingSessions = false
+  chatState.loadingMessages = false
+  chatState.sending = false
+  chatState.error = ''
   // Reset tab state
   activeTab.value = 'summary'
   activeTranscriptTab.value = 'editor'
@@ -1255,63 +1296,58 @@ const loadDetail = async () => {
   if (cached) applyCachedDetail(cached)
   
   try {
+    try {
+      await chatbotStore.loadSessions(folderName.value, { autoSelect: true })
+    } catch {
+      // Chat sessions are best-effort; continue loading page artifacts.
+    }
     const jobDetail = await getJob(folderName.value, { signal, cacheTtlMs: GET_CACHE_TTL_MS.JOB })
     manifest.value = jobDetail
     const files = jobDetail?.files || {}
 
-    const [summaryResult, transcriptJsonResult, transcriptTextResult, flashcardsResult, chatbotHistoryResult] = await Promise.allSettled([
-      files.summary_txt
-        ? fetchDownloadText(folderName.value, 'summary_txt', {
-            signal,
-            errorLabel: 'Failed to load summary'
-          })
-        : Promise.resolve(null),
-      files.transcript_json
-        ? fetchDownloadJson(folderName.value, 'transcript_json', {
-            signal,
-            errorLabel: 'Failed to load interactive transcript'
-          })
-        : Promise.resolve(null),
-      files.transcript_txt
-        ? fetchDownloadText(folderName.value, 'transcript_txt', {
-            signal,
-            errorLabel: 'Failed to load transcript'
-          })
-        : Promise.resolve(null),
-      files.flashcards_json
-        ? fetchDownloadJson(folderName.value, 'flashcards_json', {
-            signal,
-            errorLabel: 'Failed to load flashcards history'
-          })
-        : Promise.resolve(null),
-      files.chatbot_json
-        ? fetchDownloadJson(folderName.value, 'chatbot_json', {
-            signal,
-            errorLabel: 'Failed to load chatbot history'
-          })
-        : Promise.resolve(null)
-    ])
+    shareProgress.value = 0
+    const artifacts = await fetchHistoryArtifactsParallel(
+      folderName.value,
+      [
+        files.summary_txt ? { name: 'summary_txt', type: 'text' } : null,
+        files.transcript_json ? { name: 'transcript_json', type: 'json' } : null,
+        files.transcript_txt ? { name: 'transcript_txt', type: 'text' } : null,
+        files.flashcards_json ? { name: 'flashcards_json', type: 'json' } : null,
+        files.chatbot_json ? { name: 'chatbot_json', type: 'json' } : null
+      ].filter(Boolean),
+      {
+        signal,
+        onProgress: ({ percent }) => {
+          shareProgress.value = percent
+        }
+      }
+    )
+    const summaryResult = artifacts.summary_txt || { status: 'fulfilled', data: null }
+    const transcriptJsonResult = artifacts.transcript_json || { status: 'fulfilled', data: null }
+    const transcriptTextResult = artifacts.transcript_txt || { status: 'fulfilled', data: null }
+    const flashcardsResult = artifacts.flashcards_json || { status: 'fulfilled', data: null }
+    const chatbotHistoryResult = artifacts.chatbot_json || { status: 'fulfilled', data: null }
 
-    if (summaryResult.status === 'fulfilled' && typeof summaryResult.value === 'string') {
-      detail.value.summary = summaryResult.value
+    if (summaryResult.status === 'fulfilled' && typeof summaryResult.data === 'string') {
+      detail.value.summary = summaryResult.data
     } else if (!cached?.summary) {
       detail.value.summary = ''
     }
 
-    if (transcriptJsonResult.status === 'fulfilled' && Array.isArray(transcriptJsonResult.value)) {
-      transcriptData.value = transcriptJsonResult.value.map((item, index) => ({ ...item, _id: index }))
+    if (transcriptJsonResult.status === 'fulfilled' && Array.isArray(transcriptJsonResult.data)) {
+      transcriptData.value = transcriptJsonResult.data.map((item, index) => ({ ...item, _id: index }))
     } else if (!Array.isArray(cached?.transcriptData) || !cached.transcriptData.length) {
       transcriptData.value = []
     }
 
-    if (transcriptTextResult.status === 'fulfilled' && typeof transcriptTextResult.value === 'string') {
-      detail.value.transcript = transcriptTextResult.value
+    if (transcriptTextResult.status === 'fulfilled' && typeof transcriptTextResult.data === 'string') {
+      detail.value.transcript = transcriptTextResult.data
     } else if (!cached?.transcript) {
       detail.value.transcript = ''
     }
 
     if (flashcardsResult.status === 'fulfilled') {
-      flashcards.value = normalizeFlashcardsPayload(flashcardsResult.value)
+      flashcards.value = normalizeFlashcardsPayload(flashcardsResult.data)
       currentCardIndex.value = 0
       cardFlipped.value = false
     } else if (!Array.isArray(cached?.flashcards) || !cached.flashcards.length) {
@@ -1321,7 +1357,7 @@ const loadDetail = async () => {
     }
 
     if (chatbotHistoryResult.status === 'fulfilled') {
-      chatMessages.value = normalizeChatHistoryPayload(chatbotHistoryResult.value)
+      chatMessages.value = normalizeChatHistoryPayload(chatbotHistoryResult.data)
     } else if (!Array.isArray(cached?.chatMessages) || !cached.chatMessages.length) {
       chatMessages.value = []
     }
@@ -1345,6 +1381,55 @@ const loadDetail = async () => {
     if (!signal.aborted) {
       loading.value = false
     }
+  }
+}
+
+const copyShareLink = async () => {
+  shareError.value = ''
+  actionSuccess.value = ''
+  if (shareLink.value) {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(shareLink.value)
+      actionSuccess.value = 'Share link copied to clipboard.'
+    } else {
+      actionSuccess.value = 'Share link is ready.'
+    }
+    return
+  }
+  shareState.creating = true
+  try {
+    const result = await createShareLink(folderName.value)
+    shareLink.value = result.public_url || ''
+    shareId.value = result.share_id || ''
+    if (!shareLink.value) {
+      throw new Error('Share link could not be generated.')
+    }
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(shareLink.value)
+      actionSuccess.value = 'Share link copied to clipboard.'
+    } else {
+      actionSuccess.value = 'Share link generated.'
+    }
+  } catch (err) {
+    shareError.value = err.message || 'Failed to create share link.'
+  } finally {
+    shareState.creating = false
+  }
+}
+
+const revokeShare = async () => {
+  if (!shareId.value) return
+  shareError.value = ''
+  shareState.revoking = true
+  try {
+    await revokeShareLink(shareId.value)
+    shareLink.value = ''
+    shareId.value = ''
+    actionSuccess.value = 'Share link revoked.'
+  } catch (err) {
+    shareError.value = err.message || 'Failed to revoke share link.'
+  } finally {
+    shareState.revoking = false
   }
 }
 

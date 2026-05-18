@@ -26,9 +26,14 @@ const state = reactive({
     provider: savedState.settings?.provider || 'ollama',
     model: savedState.settings?.model || '',
     apiKey: savedState.settings?.apiKey || '',
+    configAdminToken: savedState.settings?.configAdminToken || '',
     apiUrl: savedState.settings?.apiUrl !== undefined
       ? savedState.settings.apiUrl
       : env.apiBaseUrl
+  },
+  pipelineUi: {
+    isOpen: Boolean(savedState.pipelineUi?.isOpen),
+    isMinimized: Boolean(savedState.pipelineUi?.isMinimized)
   },
   pipeline: {
     currentStep: savedState.pipeline?.currentStep || 1,
@@ -67,6 +72,10 @@ const logout = () => {
   state.authMethod = ''
   state.historyCache = []
   state.historyDetailCache = {}
+  state.pipelineUi = {
+    isOpen: false,
+    isMinimized: false
+  }
   state.pipeline = {
     currentStep: 1,
     status: 'idle',
@@ -98,6 +107,21 @@ const clearPipeline = () => {
   }
 }
 
+const openPipelineModal = () => {
+  state.pipelineUi.isOpen = true
+  state.pipelineUi.isMinimized = false
+}
+
+const closePipelineModal = () => {
+  state.pipelineUi.isOpen = false
+  state.pipelineUi.isMinimized = false
+}
+
+const togglePipelineMinimized = () => {
+  if (!state.pipelineUi.isOpen) return
+  state.pipelineUi.isMinimized = !state.pipelineUi.isMinimized
+}
+
 const getBaseUrl = () => {
   return normalizeBaseUrl(state.settings.apiUrl)
 }
@@ -124,4 +148,15 @@ const getAuthUrl = (endpoint) => {
   return `${getBaseUrl()}${endpoint}${sep}google_token=${token}`
 }
 
-export const useAppStore = () => ({ state, logout, clearPipeline, getBaseUrl, getAuthUrl, isTokenExpired, isTokenNearExpiry })
+export const useAppStore = () => ({
+  state,
+  logout,
+  clearPipeline,
+  openPipelineModal,
+  closePipelineModal,
+  togglePipelineMinimized,
+  getBaseUrl,
+  getAuthUrl,
+  isTokenExpired,
+  isTokenNearExpiry
+})

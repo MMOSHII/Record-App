@@ -1,10 +1,10 @@
 <template>
-  <div class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
+  <div class="font-sans min-h-screen flex flex-col" style="background: var(--app-bg); color: var(--app-text);">
     <a
       href="#main-content"
       class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[60] focus:bg-white focus:text-slate-900 focus:px-3 focus:py-2 focus:rounded-lg focus:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-600"
     >
-      Skip to main content
+      {{ t('nav.skipMainContent') }}
     </a>
     <!-- Top Navigation Bar (only when authenticated) -->
     <nav
@@ -69,6 +69,7 @@
 
     <!-- Padding for mobile bottom nav -->
     <div v-if="store.state.token" class="md:hidden h-16" />
+    <PipelineModal />
   </div>
 </template>
 
@@ -79,6 +80,7 @@ import { useAppStore } from './stores/appStore'
 import { refreshAccessToken } from './services/authService'
 import NavIcon from './components/NavIcon.vue'
 import ErrorBoundary from './components/ErrorBoundary.vue'
+import PipelineModal from './components/PipelineModal.vue'
 import { useI18n } from './i18n/index.js'
 import { useScrollReveal } from './composables/useScrollReveal'
 
@@ -146,7 +148,6 @@ onBeforeUnmount(() => {
 
 const navLinks = computed(() => [
   { to: '/', label: t('nav.home'), icon: 'home' },
-  { to: '/pipeline', label: t('nav.pipeline'), icon: 'pipeline' },
   { to: '/history', label: t('nav.history'), icon: 'history' },
   { to: '/settings', label: t('nav.settings'), icon: 'settings' }
 ])

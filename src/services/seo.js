@@ -36,7 +36,7 @@ const ROUTE_META = {
   '/reset-password': {
     title: 'Reset Password',
     description: 'Set a new password and return to your recording workflow.'
-  }
+  },
 }
 
 const ensureMeta = (selector, attrs) => {

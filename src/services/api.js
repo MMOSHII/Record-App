@@ -110,6 +110,9 @@ const buildDownloadEndpoint = (folderName, fileType, langPair = null) => {
   return langPair ? `${endpoint}?lang_pair=${encodeURIComponent(langPair)}` : endpoint
 }
 
+const buildShareReadEndpoint = (shareId, token, sig) =>
+  `/api/v1/share/${encodeURIComponent(shareId)}?token=${encodeURIComponent(token)}&sig=${encodeURIComponent(sig)}`
+
 export async function fetchDownloadText(folderName, fileType, options = {}) {
   const endpoint = buildDownloadEndpoint(folderName, fileType, options.langPair || null)
   return requestText(store.getAuthUrl(endpoint), {
@@ -207,7 +210,12 @@ export async function getJob(folderName, options = {}) {
  * GET /api/v1/history
  */
 export async function getHistory(options = {}) {
-  return fetchGetJsonWithDedup(CACHE_KEY_PREFIX.HISTORY, '/api/v1/history', 'History fetch failed', options)
+  const params = new URLSearchParams()
+  if (Number.isFinite(options.page)) params.set('page', String(options.page))
+  if (Number.isFinite(options.pageSize)) params.set('page_size', String(options.pageSize))
+  const endpoint = `/api/v1/history${params.toString() ? `?${params.toString()}` : ''}`
+  const cacheKey = `${CACHE_KEY_PREFIX.HISTORY}:${params.toString() || 'default'}`
+  return fetchGetJsonWithDedup(cacheKey, endpoint, 'History fetch failed', options)
 }
 
 /**
@@ -381,4 +389,67 @@ export async function sendChatMessage(folderName, fileName, question, history = 
     ...getModelPayload(),
     history: history.length ? history : undefined
   }, 'Chat failed', options)
+}
+
+export async function createShareLink(folderName, options = {}) {
+  return postJson('/api/v1/share/create', {
+    google_token: store.state.token,
+    folder_name: folderName,
+    expires_in_hours: options.expiresInHours
+  }, 'Share creation failed', options)
+}
+
+export async function revokeShareLink(shareId, options = {}) {
+  return requestJson(`${store.getBaseUrl()}/api/v1/share/${encodeURIComponent(shareId)}`, {
+    method: 'DELETE',
+    headers: buildAuthHeaders(),
+    errorLabel: 'Share revoke failed',
+    timeoutMs: options.timeoutMs ?? 15000,
+    retries: options.retries ?? 0,
+    signal: options.signal
+  })
+}
+
+export async function getPublicShare(shareId, token, sig, options = {}) {
+  return requestJson(`${store.getBaseUrl()}${buildShareReadEndpoint(shareId, token, sig)}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    errorLabel: options.errorLabel || 'Shared detail fetch failed',
+    timeoutMs: options.timeoutMs ?? 15000,
+    retries: options.retries ?? 1,
+    signal: options.signal
+  })
+}
+
+export async function fetchHistoryArtifactsParallel(folderName, files, options = {}) {
+  const artifacts = Array.isArray(files) ? files : []
+  const total = artifacts.length || 1
+  let completed = 0
+  const progress = (name, status) => {
+    completed += 1
+    if (typeof options.onProgress === 'function') {
+      options.onProgress({
+        name,
+        status,
+        completed,
+        total,
+        percent: Math.round((completed / total) * 100)
+      })
+    }
+  }
+
+  const tasks = artifacts.map(({ name, type, langPair }) => {
+    const handler = type === 'json' ? fetchDownloadJson : fetchDownloadText
+    return handler(folderName, name, { ...options, langPair })
+      .then((data) => {
+        progress(name, 'fulfilled')
+        return [name, { status: 'fulfilled', data }]
+      })
+      .catch((error) => {
+        progress(name, 'rejected')
+        return [name, { status: 'rejected', error: error?.message || String(error) }]
+      })
+  })
+  const entries = await Promise.all(tasks)
+  return Object.fromEntries(entries)
 }

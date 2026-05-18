@@ -24,13 +24,18 @@ const routes = [
     meta: { title: 'Reset Password', depth: 0 }
   },
   {
+    path: '/share/:shareId',
+    component: () => import('../views/ShareDetail.vue'),
+    meta: { title: 'Shared Detail', depth: 0 }
+  },
+  {
     path: '/',
     component: () => import('../views/Home.vue'),
     meta: { requiresAuth: true, title: 'Home', depth: 1 }
   },
   {
     path: '/pipeline',
-    component: () => import('../views/Pipeline.vue'),
+    component: () => import('../views/PipelineLauncher.vue'),
     meta: { requiresAuth: true, title: 'Pipeline', depth: 2 }
   },
   {
@@ -67,7 +72,9 @@ const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password'
 router.beforeEach((to, from, next) => {
   const { state } = useAppStore()
 
-  if (to.meta.requiresAuth && !state.token) {
+  if (to.path.startsWith('/share/')) {
+    next()
+  } else if (to.meta.requiresAuth && !state.token) {
     next('/login')
   } else if (PUBLIC_PATHS.includes(to.path) && state.token) {
     next('/')
